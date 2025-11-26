@@ -145,6 +145,10 @@ Build your own data aggregation service that combines multiple sources.
 
 **See `ML_INTEGRATION_GUIDE.md` for comprehensive ML model integration guide.**
 
+**See `TENSORFLOW_MODEL_GUIDE.md` for TensorFlow.js model training guide.**
+
+**See `TENSORFLOW_IMPLEMENTATION.md` for implementation details.**
+
 ## Prediction Engine
 
 ### ✅ Current Implementation (Heuristic-Based)
@@ -161,42 +165,45 @@ The prediction engine in `src/lib/predictions/predictionEngine.ts` uses weighted
 A production-ready ML service abstraction is implemented in `src/lib/predictions/mlService.ts`:
 
 - ✅ **Service interface** - Clean abstraction for different ML backends
-- ✅ **Heuristic fallback** - Currently uses heuristic engine
+- ✅ **TensorFlow.js integration** - Fully implemented and ready to use!
+- ✅ **Heuristic fallback** - Automatic fallback if ML models fail
 - ✅ **Configuration** - Configurable via Settings page
-- ✅ **Multiple backend support** - Ready for TensorFlow.js, PyTorch/TensorFlow API, or Cloud ML
+- ✅ **Multiple backend support** - TensorFlow.js (✅), PyTorch/TensorFlow API, Cloud ML
 
 **Usage:**
 ```typescript
 import { mlPredictionService } from '@/lib/predictions/mlService';
 
-// Configure (or use Settings page)
-mlPredictionService.configure({ modelType: 'heuristic' });
+// Configure TensorFlow.js (or use Settings page)
+mlPredictionService.configure({ 
+  modelType: 'tensorflow',
+  modelUrl: '/models/f1-predictor/model.json'
+});
 
-// Get predictions
+// Get predictions - automatically uses TensorFlow.js model
 const predictions = await mlPredictionService.predictRace(2024, 5);
 ```
 
-### 🔮 Future: Integrating ML Models
+### ✅ TensorFlow.js Integration (Fully Implemented!)
 
-#### Option 1: TensorFlow.js (In-Browser)
+TensorFlow.js is now fully integrated and ready to use:
 
-Run predictions directly in the browser:
+**Features:**
+- ✅ Model loading with automatic caching
+- ✅ Feature preparation (24 features per driver)
+- ✅ Race, qualifying, and season predictions
+- ✅ Automatic error handling with heuristic fallback
 
-```typescript
-import * as tf from '@tensorflow/tfjs';
+**Quick Start:**
+1. Train a model using `TENSORFLOW_MODEL_GUIDE.md`
+2. Place model in `public/models/f1-predictor/`
+3. Configure in Settings page (select "TensorFlow.js", enter model URL)
+4. Predictions automatically use your model!
 
-// Load pre-trained model
-const model = await tf.loadLayersModel('/models/f1-predictor.json');
-
-// Make predictions
-const prediction = model.predict(inputTensor);
-```
-
-**Integration Steps:**
-1. Install `@tensorflow/tfjs`: `npm install @tensorflow/tfjs`
-2. Train and export your model
-3. Update `predictWithTensorFlow` in `mlService.ts`
-4. Configure model URL in Settings page
+**Model Requirements:**
+- Input: 24 features per driver (see `TENSORFLOW_MODEL_GUIDE.md`)
+- Output: Position predictions or probabilities
+- Format: TensorFlow.js (converted from Keras/TensorFlow)
 
 #### Option 2: PyTorch/TensorFlow Backend
 
