@@ -1,5 +1,4 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -26,16 +25,53 @@ import {
 } from '@/lib/data/dataUtils';
 import { getRacePredictions } from '@/lib/predictions/predictionEngine';
 import { getDriver, getTeam } from '@/lib/data/dataUtils';
+import type { Driver, Team } from '@/types';
 
 export const Drivers: React.FC = () => {
-  const navigate = useNavigate();
   const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [teamFilter, setTeamFilter] = useState<string>('all');
   const [nationalityFilter, setNationalityFilter] = useState<string>('all');
+  const [, setStandings] = useState<{ drivers: Array<{ driver: Driver; points: number; position: number }>; teams: Array<{ team: Team; points: number; position: number }> } | null>(null);
+  const [nextRace, setNextRace] = useState<any>(null);
+  const [driverResults, setDriverResults] = useState<any[]>([]);
+  const [nextRacePrediction, setNextRacePrediction] = useState<any>(null);
 
-  const standings = getSeasonStandings(CURRENT_SEASON);
-  const nextRace = getNextRace();
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [standingsData, nextRaceData] = await Promise.all([
+          getSeasonStandings(CURRENT_SEASON),
+          getNextRace(),
+        ]);
+        setStandings(standingsData);
+        setNextRace(nextRaceData);
+      } catch (error) {
+        console.error('Error loading drivers data:', error);
+      }
+    };
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    const loadDriverResults = async () => {
+      if (!selectedDriver) {
+        setDriverResults([]);
+        return;
+      }
+      try {
+        const driver = getDriver(selectedDriver);
+        if (driver) {
+          const results = await getDriverResults(CURRENT_SEASON, driver.id);
+          setDriverResults(results);
+        }
+      } catch (error) {
+        console.error('Error loading driver results:', error);
+        setDriverResults([]);
+      }
+    };
+    loadDriverResults();
+  }, [selectedDriver]);
 
   // Filter drivers
   const filteredDrivers = useMemo(() => {
@@ -56,10 +92,6 @@ export const Drivers: React.FC = () => {
   }, []);
 
   const driver = selectedDriver ? getDriver(selectedDriver) : null;
-  const driverResults = driver ? getDriverResults(CURRENT_SEASON, driver.id) : [];
-  const driverStanding = driver
-    ? standings.drivers.find((s) => s.driver.id === driver.id)
-    : null;
 
   // Driver stats
   const driverStats = useMemo(() => {
@@ -103,11 +135,22 @@ export const Drivers: React.FC = () => {
     }));
   }, [driver, driverResults]);
 
-  // Next race prediction
-  const nextRacePrediction = useMemo(() => {
-    if (!driver || !nextRace) return null;
-    const predictions = getRacePredictions(CURRENT_SEASON, nextRace.round);
-    return predictions.find((p) => p.driverId === driver.id);
+  useEffect(() => {
+    const loadPrediction = async () => {
+      if (!driver || !nextRace) {
+        setNextRacePrediction(null);
+        return;
+      }
+      try {
+        const predictions = await getRacePredictions(CURRENT_SEASON, nextRace.round);
+        const prediction = predictions.find((p: any) => p.driverId === driver.id);
+        setNextRacePrediction(prediction || null);
+      } catch (error) {
+        console.error('Error loading prediction:', error);
+        setNextRacePrediction(null);
+      }
+    };
+    loadPrediction();
   }, [driver, nextRace]);
 
   if (selectedDriver && driver) {
@@ -212,7 +255,7 @@ export const Drivers: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {driverResults.map((result, index) => (
+                {driverResults.map((result: any, index: number) => (
                   <tr key={index} className="border-b border-border hover:bg-accent">
                     <td className="p-2 text-sm">{index + 1}</td>
                     <td className="p-2 text-sm">{result.grid}</td>
@@ -297,7 +340,6 @@ export const Drivers: React.FC = () => {
       {/* Drivers Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredDrivers.map((driver) => {
-          const standing = standings.drivers.find((s) => s.driver.id === driver.id);
           return (
             <DriverCard
               key={driver.id}

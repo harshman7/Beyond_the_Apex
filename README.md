@@ -78,58 +78,56 @@ src/
 
 ## Data Layer
 
-### Current Implementation (Mock Data)
+### ✅ Current Implementation (OpenF1 API + Ergast Fallback + Mock)
 
-The application currently uses mock data defined in `src/lib/data/mockData.ts`. This includes:
+The application now uses the **OpenF1 API** (modern, recommended) with fallback to Ergast API, then mock data:
 
-- **20 Drivers** with realistic stats
-- **10 Teams** with color schemes
-- **24 Circuits** with track information
-- **Multiple seasons** (2022, 2023, 2024) with races and results
-- **Generated results** with realistic race data
+- ✅ **OpenF1 API** (https://api.openf1.org) - Modern, free, no CORS issues
+- ✅ **Ergast API fallback** (http://ergast.com/api/f1/) - Deprecated end of 2024, used as fallback
+- ✅ **Automatic fallback chain**: OpenF1 → Ergast → Mock data
+- ✅ **Response caching** (5 minutes)
+- ✅ **Loading states** and error handling
+- ✅ **Custom React hooks** for data fetching
 
-### Integrating Real F1 Data
+**Why OpenF1 instead of FastF1?**
+- FastF1 is a Python library, not a REST API
+- OpenF1 provides similar data as a REST API (no backend needed)
+- See `FASTF1_BACKEND.md` if you want to use FastF1 via a Python backend
 
-#### Option 1: Ergast API (Free)
+**Files:**
+- `src/lib/api/openF1Client.ts` - OpenF1 API client (primary)
+- `src/lib/api/openF1Transformers.ts` - Transform OpenF1 responses
+- `src/lib/api/ergastClient.ts` - Ergast API client (fallback)
+- `src/lib/api/dataTransformers.ts` - Transform Ergast responses
+- `src/lib/api/f1DataService.ts` - Main data service with caching
+- `src/hooks/useF1Data.ts` - React hooks for data fetching
 
-The [Ergast API](http://ergast.com/mrd/) provides free access to F1 historical data.
+**Configuration:**
+- Enable/disable API: `src/lib/api/f1DataService.ts` → `USE_API`
+- Use OpenF1: `src/lib/api/f1DataService.ts` → `USE_OPENF1`
+- Ergast fallback: `src/lib/api/f1DataService.ts` → `USE_ERGAST_FALLBACK`
+- Cache duration: `src/lib/api/f1DataService.ts` → `CACHE_DURATION`
 
-**Integration Steps:**
+### Alternative APIs
 
-1. Create a service in `src/lib/data/api.ts`:
-   ```typescript
-   export const fetchRaceResults = async (season: number, round: number) => {
-     const response = await fetch(
-       `http://ergast.com/api/f1/${season}/${round}/results.json`
-     );
-     const data = await response.json();
-     // Transform API response to match Result type
-     return transformErgastResults(data);
-   };
-   ```
-
-2. Replace mock data calls in `dataUtils.ts` with API calls
-
-3. Add caching layer for performance
+#### Option 1: OpenF1 API
+- URL: https://api.openf1.org
+- Real-time data (paid for live)
+- Update `ergastClient.ts` to use OpenF1 endpoints
 
 #### Option 2: FastF1 (Python Backend)
-
 [FastF1](https://github.com/theOehrly/Fast-F1) provides live timing and telemetry data.
 
 **Integration Steps:**
-
 1. Create a Python backend service that uses FastF1
 2. Expose REST API endpoints
-3. Create API client in `src/lib/data/api.ts`
-4. Replace mock data calls
+3. Update `ergastClient.ts` to use your backend
+4. Add authentication if needed
 
 #### Option 3: Custom Microservice
-
 Build your own data aggregation service that combines multiple sources.
 
-**TODO Locations:**
-- `src/lib/data/mockData.ts` - Replace with API calls
-- `src/lib/data/dataUtils.ts` - Update query functions to use real APIs
+**See `API_INTEGRATION.md` for detailed integration guide.**
 
 ## Prediction Engine
 

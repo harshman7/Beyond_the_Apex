@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { format, differenceInDays, differenceInHours, differenceInMinutes } from 'date-fns';
 import {
   LineChart,
@@ -15,24 +15,63 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { StatCard } from '@/components/ui/StatCard';
-import { Calendar, MapPin, Cloud, AlertCircle } from 'lucide-react';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { ErrorMessage } from '@/components/ui/ErrorMessage';
+import { Calendar, MapPin, Cloud } from 'lucide-react';
 import {
   getNextRace,
   getSeasonStandings,
-  getRaces,
-  getRaceResults,
   CURRENT_SEASON,
 } from '@/lib/data/dataUtils';
 import { getRacePredictions } from '@/lib/predictions/predictionEngine';
 import { getCircuit, getDriver, getTeam } from '@/lib/data/dataUtils';
-import { DRIVERS, TEAMS } from '@/lib/data/mockData';
+import { useRaces } from '@/hooks/useF1Data';
+import { getTeamsFromAPI } from '@/lib/api/f1DataService';
+import type { Team, Driver } from '@/types';
 
 export const Overview: React.FC = () => {
-  const nextRace = getNextRace();
-  const standings = getSeasonStandings(CURRENT_SEASON);
-  const races = getRaces(CURRENT_SEASON);
-  const completedRaces = races.filter((r) => r.completed);
+  const [nextRace, setNextRace] = useState<any>(null);
+  const [standings, setStandings] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [teams, setTeams] = useState<Team[]>([]);
+
+  const { data: races, loading: racesLoading, error: racesError } = useRaces(CURRENT_SEASON);
+  const completedRaces = useMemo(() => races?.filter((r) => r.completed) || [], [races]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      console.log('[Overview] 🚀 Starting data load...');
+      const startTime = Date.now();
+      try {
+        setLoading(true);
+        setError(null);
+        console.log('[Overview] 📊 Fetching next race, standings, and teams...');
+        const [nextRaceData, standingsData, teamsData] = await Promise.all([
+          getNextRace(),
+          getSeasonStandings(CURRENT_SEASON),
+          getTeamsFromAPI(CURRENT_SEASON),
+        ]);
+        setNextRace(nextRaceData);
+        setStandings(standingsData);
+        setTeams(teamsData);
+        const duration = Date.now() - startTime;
+        console.log(`[Overview] ✅ Data loaded successfully (${duration}ms)`);
+      } catch (err) {
+        console.error('[Overview] ❌ Error loading overview data:', err);
+        setError(err instanceof Error ? err : new Error(`Failed to load data from OpenF1 API: ${err instanceof Error ? err.message : 'Unknown error'}`));
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    // Wait a bit for caches to initialize
+    const timer = setTimeout(() => {
+      loadData();
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, []);
 
   // Next race countdown
   const countdown = useMemo(() => {
@@ -45,76 +84,98 @@ export const Overview: React.FC = () => {
     return { days, hours, minutes };
   }, [nextRace]);
 
-  // Next race predictions
-  const nextRacePredictions = useMemo(() => {
-    if (!nextRace) return [];
-    return getRacePredictions(CURRENT_SEASON, nextRace.round)
-      .slice(0, 3)
-      .sort((a, b) => a.expectedFinishPosition - b.expectedFinishPosition);
+  const [nextRacePredictions, setNextRacePredictions] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadPredictions = async () => {
+      if (!nextRace) {
+        console.log('[Overview] ⏭️ No next race, skipping predictions');
+        setNextRacePredictions([]);
+        return;
+      }
+      console.log(`[Overview] 🔮 Loading predictions for race ${nextRace.round}...`);
+      try {
+        const predictions = await getRacePredictions(CURRENT_SEASON, nextRace.round);
+        const top3 = predictions
+          .slice(0, 3)
+          .sort((a, b) => a.expectedFinishPosition - b.expectedFinishPosition);
+        setNextRacePredictions(top3);
+        console.log(`[Overview] ✅ Loaded ${top3.length} predictions`);
+      } catch (error) {
+        console.error('[Overview] ❌ Error loading race predictions:', error);
+        setNextRacePredictions([]);
+      }
+    };
+    loadPredictions();
   }, [nextRace]);
+
+  if (loading || racesLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <LoadingSpinner size="lg" />
+        <p className="text-muted-foreground">Loading F1 data from OpenF1 API...</p>
+        <p className="text-xs text-muted-foreground">This may take a moment on first load</p>
+      </div>
+    );
+  }
+
+  if (error || racesError) {
+    const displayError = error || racesError || new Error('Unknown error');
+    return (
+      <div className="p-6 space-y-4">
+        <ErrorMessage 
+          error={displayError} 
+          onRetry={() => {
+            setLoading(true);
+            setError(null);
+            window.location.reload();
+          }} 
+        />
+        <div className="bg-card rounded-2xl p-6 border border-border">
+          <p className="text-sm text-muted-foreground mb-2">
+            The app is configured to use only OpenF1 API (no fallbacks).
+          </p>
+          <p className="text-sm text-muted-foreground">
+            If you're seeing this error, the API might be temporarily unavailable or rate-limited. 
+            Check the browser console (F12) for more details.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!standings || !races || races.length === 0) {
+    return (
+      <div className="bg-card rounded-2xl p-6 border border-border text-center">
+        <p className="text-muted-foreground mb-2">No data available from OpenF1 API</p>
+        <p className="text-sm text-muted-foreground">
+          The API might be rate-limited (max 3 requests/second) or the season data is not yet available.
+        </p>
+      </div>
+    );
+  }
 
   // Season points progression
   const pointsProgression = useMemo(() => {
+    if (!standings) return { data: [], drivers: [] };
     const topDrivers = standings.drivers.slice(0, 5);
-    const data: Array<{ round: number; [key: string]: number | string }> = [];
+    return { data: [], drivers: topDrivers.map((s: any) => getDriver(s.driver.id)!).filter(Boolean) };
+  }, [standings]);
 
-    completedRaces.forEach((race) => {
-      const entry: { round: number; [key: string]: number | string } = { round: race.round };
-      const results = getRaceResults(CURRENT_SEASON, race.round);
-
-      topDrivers.forEach((standing) => {
-        const result = results.find((r) => r.driverId === standing.driver.id);
-        const driver = getDriver(standing.driver.id);
-        entry[driver?.code || ''] = (entry[driver?.code || ''] as number || 0) + (result?.points || 0);
-      });
-
-      data.push(entry);
-    });
-
-    return { data, drivers: topDrivers.map((s) => getDriver(s.driver.id)!) };
-  }, [standings, completedRaces]);
-
-  // Team performance
+  // Team performance - simplified for now
   const teamPerformance = useMemo(() => {
-    const data: Array<{ round: number; [key: string]: number }> = [];
+    return [];
+  }, []);
 
-    completedRaces.forEach((race) => {
-      const entry: { round: number; [key: string]: number } = { round: race.round };
-      const results = getRaceResults(CURRENT_SEASON, race.round);
-
-      TEAMS.forEach((team) => {
-        const teamDrivers = DRIVERS.filter((d) => d.teamId === team.id);
-        const teamPoints = results
-          .filter((r) => teamDrivers.some((d) => d.id === r.driverId))
-          .reduce((sum, r) => sum + r.points, 0);
-        entry[team.name] = teamPoints;
-      });
-
-      data.push(entry);
-    });
-
-    return data;
-  }, [completedRaces]);
-
-  // Recent races
+  // Recent races - simplified, will be populated with async data
   const recentRaces = useMemo(() => {
-    return completedRaces
-      .slice(-10)
-      .reverse()
-      .map((race) => {
-        const results = getRaceResults(CURRENT_SEASON, race.round);
-        const winner = results.find((r) => r.finishPosition === 1);
-        const pole = results.find((r) => r.grid === 1);
-        const fastestLap = results.find((r) => r.fastestLap);
-
-        return {
-          ...race,
-          winner: winner ? getDriver(winner.driverId) : null,
-          pole: pole ? getDriver(pole.driverId) : null,
-          fastestLap: fastestLap ? getDriver(fastestLap.driverId) : null,
-          circuit: getCircuit(race.circuitId),
-        };
-      });
+    return completedRaces.slice(-10).reverse().map((race) => ({
+      ...race,
+      winner: null as Driver | null,
+      pole: null as Driver | null,
+      fastestLap: null as Driver | null,
+      circuit: getCircuit(race.circuitId),
+    }));
   }, [completedRaces]);
 
   // Win probability data for donut chart
@@ -262,7 +323,7 @@ export const Overview: React.FC = () => {
                       paddingAngle={5}
                       dataKey="value"
                     >
-                      {winProbabilityData.map((entry, index) => (
+                      {winProbabilityData.map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -293,7 +354,7 @@ export const Overview: React.FC = () => {
                 }}
               />
               <Legend />
-              {pointsProgression.drivers.map((driver, index) => (
+              {pointsProgression.drivers.map((driver: Driver, index: number) => (
                 <Line
                   key={driver.id}
                   type="monotone"
@@ -325,7 +386,7 @@ export const Overview: React.FC = () => {
                 }}
               />
               <Legend />
-              {TEAMS.slice(0, 5).map((team) => (
+              {teams.slice(0, 5).map((team: Team) => (
                 <Bar
                   key={team.id}
                   dataKey={team.name}

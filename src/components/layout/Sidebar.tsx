@@ -8,7 +8,6 @@ import {
   History,
   TrendingUp,
   Settings,
-  Menu,
   X,
 } from 'lucide-react';
 import { Button } from '../ui/Button';

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   BarChart,
   Bar,
@@ -13,15 +13,30 @@ import { StatCard } from '@/components/ui/StatCard';
 import { TEAMS, DRIVERS } from '@/lib/data/mockData';
 import {
   getSeasonStandings,
-  getTeamResults,
   CURRENT_SEASON,
 } from '@/lib/data/dataUtils';
 import { getSeasonOutcomeProbabilities } from '@/lib/predictions/predictionEngine';
 import { getTeam } from '@/lib/data/dataUtils';
 
 export const Constructors: React.FC = () => {
-  const standings = getSeasonStandings(CURRENT_SEASON);
-  const seasonProbs = getSeasonOutcomeProbabilities(CURRENT_SEASON);
+  const [standings, setStandings] = useState<{ drivers: Array<{ driver: any; points: number; position: number }>; teams: Array<{ team: any; points: number; position: number }> } | null>(null);
+  const [seasonProbs, setSeasonProbs] = useState<any>(null);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [standingsData, probsData] = await Promise.all([
+          getSeasonStandings(CURRENT_SEASON),
+          getSeasonOutcomeProbabilities(CURRENT_SEASON),
+        ]);
+        setStandings(standingsData);
+        setSeasonProbs(probsData);
+      } catch (error) {
+        console.error('Error loading constructors data:', error);
+      }
+    };
+    loadData();
+  }, []);
 
   // Driver contributions to team points
   const driverContributions = useMemo(() => {
@@ -43,7 +58,8 @@ export const Constructors: React.FC = () => {
 
   // Team outlook
   const teamOutlook = useMemo(() => {
-    return seasonProbs.constructorTitle.map((prob) => ({
+    if (!seasonProbs) return [];
+    return seasonProbs.constructorTitle.map((prob: any) => ({
       team: getTeam(prob.teamId)?.name || '',
       p1: prob.projectedFinalPosition === 1 ? prob.titleProbability : 0,
       p2: prob.projectedFinalPosition === 2 ? prob.titleProbability : 0,
@@ -75,7 +91,7 @@ export const Constructors: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {standings.teams.map((standing) => {
+              {standings?.teams.map((standing: { team: any; points: number; position: number }) => {
                 const team = standing.team;
                 const teamDrivers = DRIVERS.filter((d) => d.teamId === team.id);
                 return (
@@ -142,7 +158,7 @@ export const Constructors: React.FC = () => {
       <div className="bg-card rounded-2xl p-6 border border-border">
         <h2 className="text-xl font-bold text-foreground mb-4">Championship Outlook</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          {seasonProbs.constructorTitle.slice(0, 3).map((prob) => {
+          {seasonProbs?.constructorTitle.slice(0, 3).map((prob: any) => {
             const team = getTeam(prob.teamId);
             return (
               <StatCard

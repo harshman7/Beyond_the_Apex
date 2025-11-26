@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { Select } from '@/components/ui/Select';
 import { getHistoricalMetric } from '@/lib/data/dataUtils';
+import type { HistoricalMetric } from '@/types';
 import { getPredictionAccuracy } from '@/lib/predictions/predictionEngine';
 import { DRIVERS, TEAMS, CURRENT_SEASON } from '@/lib/data/mockData';
 import { getDriver, getTeam } from '@/lib/data/dataUtils';
@@ -21,51 +22,70 @@ export const Historical: React.FC = () => {
   const [entityType, setEntityType] = useState<'drivers' | 'teams'>('drivers');
   const [selectedEntity, setSelectedEntity] = useState<string>('all');
 
-  const availableSeasons = [2022, 2023, 2024];
+  const [historicalData, setHistoricalData] = useState<Array<{ round: number; [key: string]: number | string }>>([]);
 
   // Historical metric data
-  const historicalData = useMemo(() => {
-    const data = getHistoricalMetric(seasons, metric, entityType, selectedEntity !== 'all' ? selectedEntity : undefined);
-    
-    // Group by round for chart
-    const grouped: Map<number, Array<{ season: number; round: number; value: number; entityId: string }>> = new Map();
-    
-    data.forEach((item) => {
-      const key = item.round;
-      if (!grouped.has(key)) {
-        grouped.set(key, []);
+  useEffect(() => {
+    const loadHistoricalData = async () => {
+      try {
+        const data = await getHistoricalMetric(seasons, metric, entityType, selectedEntity !== 'all' ? selectedEntity : undefined);
+        
+        // Group by round for chart
+        const grouped: Map<number, Array<{ season: number; round: number; value: number; entityId: string }>> = new Map();
+        
+        data.forEach((item: HistoricalMetric) => {
+          const key = item.round;
+          if (!grouped.has(key)) {
+            grouped.set(key, []);
+          }
+          grouped.get(key)!.push({
+            season: item.season,
+            round: item.round,
+            value: item.value,
+            entityId: item.driverId || item.teamId || '',
+          });
+        });
+
+        // Convert to chart format
+        const chartData: Array<{ round: number; [key: string]: number | string }> = [];
+        grouped.forEach((items, round) => {
+          const entry: { round: number; [key: string]: number | string } = { round };
+          items.forEach((item) => {
+            const entity = entityType === 'drivers' 
+              ? getDriver(item.entityId)
+              : getTeam(item.entityId);
+            const label = entityType === 'drivers' 
+              ? (entity as ReturnType<typeof getDriver>)?.code || ''
+              : (entity as ReturnType<typeof getTeam>)?.name || '';
+            entry[label] = item.value;
+          });
+          chartData.push(entry);
+        });
+
+        setHistoricalData(chartData.sort((a, b) => a.round - b.round));
+      } catch (error) {
+        console.error('Error loading historical data:', error);
+        setHistoricalData([]);
       }
-      grouped.get(key)!.push({
-        season: item.season,
-        round: item.round,
-        value: item.value,
-        entityId: item.driverId || item.teamId || '',
-      });
-    });
-
-    // Convert to chart format
-    const chartData: Array<{ round: number; [key: string]: number | string }> = [];
-    grouped.forEach((items, round) => {
-      const entry: { round: number; [key: string]: number | string } = { round };
-      items.forEach((item) => {
-        const entity = entityType === 'drivers' 
-          ? getDriver(item.entityId)
-          : getTeam(item.entityId);
-        const label = entityType === 'drivers' 
-          ? (entity as ReturnType<typeof getDriver>)?.code || ''
-          : (entity as ReturnType<typeof getTeam>)?.name || '';
-        entry[label] = item.value;
-      });
-      chartData.push(entry);
-    });
-
-    return chartData.sort((a, b) => a.round - b.round);
+    };
+    
+    loadHistoricalData();
   }, [seasons, metric, entityType, selectedEntity]);
 
-  // Prediction accuracy
-  const predictionAccuracy = useMemo(() => {
-    const completedRounds = [1, 2, 3, 4, 5]; // First 5 completed races
-    return getPredictionAccuracy(CURRENT_SEASON, completedRounds);
+  const [predictionAccuracy, setPredictionAccuracy] = useState<Array<{ raceId: string; driverId: string; predictedPosition: number; actualPosition: number; error: number }>>([]);
+
+  useEffect(() => {
+    const loadPredictionAccuracy = async () => {
+      const completedRounds = [1, 2, 3, 4, 5]; // First 5 completed races
+      try {
+        const accuracy = await getPredictionAccuracy(CURRENT_SEASON, completedRounds);
+        setPredictionAccuracy(accuracy);
+      } catch (error) {
+        console.error('Error loading prediction accuracy:', error);
+        setPredictionAccuracy([]);
+      }
+    };
+    loadPredictionAccuracy();
   }, []);
 
   const avgError = useMemo(() => {

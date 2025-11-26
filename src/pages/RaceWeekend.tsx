@@ -1,5 +1,4 @@
-import React, { useState, useMemo } from 'react';
-import { format } from 'date-fns';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   LineChart,
   Line,
@@ -13,24 +12,72 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { Select } from '@/components/ui/Select';
-import { StatCard } from '@/components/ui/StatCard';
-import { getRaces, getRace, getRaceResults, getCircuitHistory, CURRENT_SEASON } from '@/lib/data/dataUtils';
+import { getRaces, getRace, getRaceResults, getCircuitHistory, CURRENT_SEASON, getCircuit, getDriver, getTeam } from '@/lib/data/dataUtils';
 import { getRacePredictions, getQualiPredictions } from '@/lib/predictions/predictionEngine';
-import { getCircuit, getDriver, getTeam } from '@/lib/data/dataUtils';
-import { DRIVERS, TEAMS } from '@/lib/data/mockData';
+import type { Driver, Race, Result } from '@/types';
 
 export const RaceWeekend: React.FC = () => {
   const [season, setSeason] = useState(CURRENT_SEASON);
   const [round, setRound] = useState(1);
   const [activeTab, setActiveTab] = useState<'overview' | 'qualifying' | 'race' | 'predictions'>('overview');
 
-  const races = getRaces(season);
-  const race = getRace(season, round);
+  const [races, setRaces] = useState<Race[]>([]);
+  const [race, setRace] = useState<Race | undefined>(undefined);
+  const [results, setResults] = useState<Result[]>([]);
+  const [circuitHistory, setCircuitHistory] = useState<Array<{
+    season: number;
+    race: Race;
+    winner: Driver | null;
+    pole: Driver | null;
+    safetyCars: number;
+    notableStat?: string;
+  }>>([]);
+  const [racePredictions, setRacePredictions] = useState<any[]>([]);
+  const [qualiPredictions, setQualiPredictions] = useState<any[]>([]);
+  
+  useEffect(() => {
+    const loadData = async () => {
+      const racesData = await getRaces(season);
+      setRaces(racesData);
+      const raceData = await getRace(season, round);
+      setRace(raceData);
+      if (raceData) {
+        const resultsData = await getRaceResults(season, round);
+        setResults(resultsData);
+        const circuit = getCircuit(raceData.circuitId);
+        if (circuit) {
+          const history = await getCircuitHistory(circuit.id, 5);
+          setCircuitHistory(history);
+        }
+      }
+    };
+    loadData();
+  }, [season, round]);
+
+  useEffect(() => {
+    const loadPredictions = async () => {
+      if (!race) {
+        setRacePredictions([]);
+        setQualiPredictions([]);
+        return;
+      }
+      try {
+        const [racePreds, qualiPreds] = await Promise.all([
+          getRacePredictions(season, round),
+          getQualiPredictions(season, round),
+        ]);
+        setRacePredictions(racePreds);
+        setQualiPredictions(qualiPreds);
+      } catch (error) {
+        console.error('Error loading predictions:', error);
+        setRacePredictions([]);
+        setQualiPredictions([]);
+      }
+    };
+    loadPredictions();
+  }, [race, season, round]);
+  
   const circuit = race ? getCircuit(race.circuitId) : null;
-  const results = race ? getRaceResults(season, round) : [];
-  const circuitHistory = circuit ? getCircuitHistory(circuit.id, 5) : [];
-  const racePredictions = race ? getRacePredictions(season, round) : [];
-  const qualiPredictions = race ? getQualiPredictions(season, round) : [];
 
   // Position vs lap data (mock for now)
   const positionData = useMemo(() => {
@@ -412,7 +459,7 @@ export const RaceWeekend: React.FC = () => {
                 {/* Expected Points Chart */}
                 <div className="h-64 mt-6">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={racePredictions.slice(0, 10).map((p) => ({
+                    <BarChart data={racePredictions.slice(0, 10).map((p: any) => ({
                       driver: getDriver(p.driverId)?.code || '',
                       points: p.pointsProjection,
                     }))}>

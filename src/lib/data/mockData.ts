@@ -9,7 +9,6 @@ import type {
   Circuit,
   Race,
   Result,
-  SessionResult,
 } from '@/types';
 
 // Team colors (F1 2024 inspired)
@@ -711,6 +710,8 @@ RACES_BY_SEASON.set(2022, generateRaces(2022));
 const generateResults = (race: Race): Result[] => {
   const results: Result[] = [];
   const shuffledDrivers = [...DRIVERS].sort(() => Math.random() - 0.5);
+  const circuit = CIRCUITS.find((c) => c.id === race.circuitId);
+  const totalLaps = circuit?.laps || 50;
 
   shuffledDrivers.forEach((driver, index) => {
     const finishPosition = index + 1;
@@ -729,15 +730,15 @@ const generateResults = (race: Race): Result[] => {
       tyreStints: [
         {
           compound: ['soft', 'medium', 'hard'][Math.floor(Math.random() * 3)] as 'soft' | 'medium' | 'hard',
-          laps: Math.floor(race.laps * (0.4 + Math.random() * 0.3)),
+          laps: Math.floor(totalLaps * (0.4 + Math.random() * 0.3)),
           startLap: 1,
-          endLap: Math.floor(race.laps * (0.4 + Math.random() * 0.3)),
+          endLap: Math.floor(totalLaps * (0.4 + Math.random() * 0.3)),
         },
         {
           compound: ['soft', 'medium', 'hard'][Math.floor(Math.random() * 3)] as 'soft' | 'medium' | 'hard',
-          laps: race.laps - Math.floor(race.laps * (0.4 + Math.random() * 0.3)),
-          startLap: Math.floor(race.laps * (0.4 + Math.random() * 0.3)) + 1,
-          endLap: race.laps,
+          laps: totalLaps - Math.floor(totalLaps * (0.4 + Math.random() * 0.3)),
+          startLap: Math.floor(totalLaps * (0.4 + Math.random() * 0.3)) + 1,
+          endLap: totalLaps,
         },
       ],
       DNF,
@@ -752,7 +753,7 @@ const generateResults = (race: Race): Result[] => {
 const RESULTS_BY_RACE: Map<string, Result[]> = new Map();
 
 // Initialize results for completed races
-RACES_BY_SEASON.forEach((races, season) => {
+RACES_BY_SEASON.forEach((races) => {
   races.forEach((race) => {
     if (race.completed) {
       const raceId = `${race.season}-${race.round}`;
@@ -762,7 +763,7 @@ RACES_BY_SEASON.forEach((races, season) => {
 });
 
 // Update driver and team stats from results
-const updateStats = () => {
+const updateStats = async () => {
   // Reset stats
   DRIVERS.forEach((driver) => {
     driver.points = 0;
@@ -779,7 +780,7 @@ const updateStats = () => {
   });
 
   // Calculate stats from results
-  RESULTS_BY_RACE.forEach((results, raceId) => {
+  RESULTS_BY_RACE.forEach((results) => {
     results.forEach((result) => {
       const driver = DRIVERS.find((d) => d.id === result.driverId);
       const team = TEAMS.find((t) => t.id === driver?.teamId);

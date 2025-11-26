@@ -1,6 +1,6 @@
 /**
  * Data utility functions for querying F1 data
- * TODO: Replace with real API calls (Ergast API, FastF1, etc.)
+ * Now uses Ergast API with fallback to mock data
  */
 
 import type {
@@ -12,87 +12,164 @@ import type {
   HistoricalMetric,
 } from '@/types';
 import {
-  DRIVERS,
-  TEAMS,
-  CIRCUITS,
-  RACES_BY_SEASON,
-  RESULTS_BY_RACE,
   CURRENT_SEASON,
 } from './mockData';
+import {
+  getRacesFromAPI,
+  getRaceResultsFromAPI,
+  getDriversFromAPI,
+  getTeamsFromAPI,
+  getCircuitsFromAPI,
+} from '../api/f1DataService';
+
+// Cache for API data
+let driversCache: Driver[] | null = null;
+let teamsCache: Team[] | null = null;
+let circuitsCache: Circuit[] | null = null;
+const racesCache = new Map<number, Race[]>();
+const resultsCache = new Map<string, Result[]>();
+
+// Initialize caches on first load - OpenF1 API only
+let initialized = false;
+const initializeCaches = async () => {
+  if (initialized) {
+    console.log('[Cache] ✅ Caches already initialized');
+    return;
+  }
+  console.log('[Cache] 🚀 Initializing caches from OpenF1 API...');
+  const startTime = Date.now();
+  try {
+    console.log('[Cache] 📦 Loading drivers...');
+    driversCache = await getDriversFromAPI(CURRENT_SEASON);
+    console.log('[Cache] 📦 Loading teams...');
+    teamsCache = await getTeamsFromAPI(CURRENT_SEASON);
+    console.log('[Cache] 📦 Loading circuits...');
+    circuitsCache = await getCircuitsFromAPI();
+    console.log('[Cache] 📦 Loading races...');
+    const races = await getRacesFromAPI(CURRENT_SEASON);
+    racesCache.set(CURRENT_SEASON, races);
+    initialized = true;
+    const duration = Date.now() - startTime;
+    console.log(`[Cache] ✅ Caches initialized successfully (${duration}ms)`);
+    console.log(`[Cache] 📊 Cache stats: ${driversCache?.length || 0} drivers, ${teamsCache?.length || 0} teams, ${circuitsCache?.length || 0} circuits, ${races.length} races`);
+  } catch (error) {
+    console.error('[Cache] ❌ Error initializing caches from OpenF1 API:', error);
+    // Don't fallback - let the error propagate so UI can show it
+    throw error;
+  }
+};
+
+// Initialize on import (non-blocking) - don't block app startup
+// Caches will be populated when first accessed
+setTimeout(() => {
+  initializeCaches().catch((error) => {
+    console.error('[Cache] ❌ Failed to initialize caches:', error);
+    // Don't throw - let the app continue with empty caches
+  });
+}, 100);
 
 export const getDriver = (driverId: string): Driver | undefined => {
-  return DRIVERS.find((d) => d.id === driverId);
+  if (!driversCache) {
+    console.warn('Drivers cache not initialized yet');
+    return undefined;
+  }
+  return driversCache.find((d) => d.id === driverId);
 };
 
 export const getTeam = (teamId: string): Team | undefined => {
-  return TEAMS.find((t) => t.id === teamId);
+  if (!teamsCache) {
+    console.warn('Teams cache not initialized yet');
+    return undefined;
+  }
+  return teamsCache.find((t) => t.id === teamId);
 };
 
 export const getCircuit = (circuitId: string): Circuit | undefined => {
-  return CIRCUITS.find((c) => c.id === circuitId);
+  if (!circuitsCache) {
+    console.warn('Circuits cache not initialized yet');
+    return undefined;
+  }
+  return circuitsCache.find((c) => c.id === circuitId);
 };
 
-export const getRace = (season: number, round: number): Race | undefined => {
-  const races = RACES_BY_SEASON.get(season);
-  return races?.find((r) => r.round === round);
+export const getRace = async (season: number, round: number): Promise<Race | undefined> => {
+  let races = racesCache.get(season);
+  if (!races) {
+    races = await getRacesFromAPI(season);
+    racesCache.set(season, races);
+  }
+  return races.find((r) => r.round === round);
 };
 
-export const getRaces = (season: number): Race[] => {
-  return RACES_BY_SEASON.get(season) || [];
+export const getRaces = async (season: number): Promise<Race[]> => {
+  let races = racesCache.get(season);
+  if (!races) {
+    races = await getRacesFromAPI(season);
+    racesCache.set(season, races);
+  }
+  return races;
 };
 
-export const getNextRace = (): Race | undefined => {
-  const races = RACES_BY_SEASON.get(CURRENT_SEASON) || [];
+export const getNextRace = async (): Promise<Race | undefined> => {
+  const races = await getRaces(CURRENT_SEASON);
   return races.find((r) => !r.completed);
 };
 
-export const getRaceResults = (season: number, round: number): Result[] => {
+export const getRaceResults = async (season: number, round: number): Promise<Result[]> => {
   const raceId = `${season}-${round}`;
-  return RESULTS_BY_RACE.get(raceId) || [];
+  let results = resultsCache.get(raceId);
+  if (!results) {
+    results = await getRaceResultsFromAPI(season, round);
+    resultsCache.set(raceId, results);
+  }
+  return results;
 };
 
-export const getDriverResults = (season: number, driverId: string): Result[] => {
-  const races = RACES_BY_SEASON.get(season) || [];
+export const getDriverResults = async (season: number, driverId: string): Promise<Result[]> => {
+  const races = await getRaces(season);
   const results: Result[] = [];
 
-  races.forEach((race) => {
-    const raceResults = getRaceResults(season, race.round);
+  for (const race of races) {
+    const raceResults = await getRaceResults(season, race.round);
     const driverResult = raceResults.find((r) => r.driverId === driverId);
     if (driverResult) {
       results.push(driverResult);
     }
-  });
+  }
 
   return results.sort((a, b) => {
-    const raceA = getRace(season, parseInt(a.raceId.split('-')[1]));
-    const raceB = getRace(season, parseInt(b.raceId.split('-')[1]));
-    return (raceA?.round || 0) - (raceB?.round || 0);
+    const roundA = parseInt(a.raceId.split('-')[1]);
+    const roundB = parseInt(b.raceId.split('-')[1]);
+    return roundA - roundB;
   });
 };
 
-export const getTeamResults = (season: number, teamId: string): Result[] => {
-  const teamDrivers = DRIVERS.filter((d) => d.teamId === teamId);
+export const getTeamResults = async (season: number, teamId: string): Promise<Result[]> => {
+  if (!driversCache) {
+    throw new Error('Drivers cache not initialized');
+  }
+  const teamDrivers = driversCache.filter((d) => d.teamId === teamId);
   const results: Result[] = [];
 
-  teamDrivers.forEach((driver) => {
-    const driverResults = getDriverResults(season, driver.id);
+  for (const driver of teamDrivers) {
+    const driverResults = await getDriverResults(season, driver.id);
     results.push(...driverResults);
-  });
+  }
 
   return results;
 };
 
-export const getSeasonStandings = (season: number): {
+export const getSeasonStandings = async (season: number): Promise<{
   drivers: Array<{ driver: Driver; points: number; position: number }>;
   teams: Array<{ team: Team; points: number; position: number }>;
-} => {
-  const races = RACES_BY_SEASON.get(season) || [];
+}> => {
+  const races = await getRaces(season);
   const driverPoints = new Map<string, number>();
   const teamPoints = new Map<string, number>();
 
-  races.forEach((race) => {
+  for (const race of races) {
     if (race.completed) {
-      const results = getRaceResults(season, race.round);
+      const results = await getRaceResults(season, race.round);
       results.forEach((result) => {
         const driver = getDriver(result.driverId);
         if (driver) {
@@ -104,7 +181,7 @@ export const getSeasonStandings = (season: number): {
         }
       });
     }
-  });
+  }
 
   const driverStandings = Array.from(driverPoints.entries())
     .map(([driverId, points]) => ({
@@ -136,48 +213,52 @@ export const getSeasonStandings = (season: number): {
   };
 };
 
-export const getHistoricalResults = (seasons: number[]): {
+export const getHistoricalResults = async (seasons: number[]): Promise<{
   races: Race[];
   results: Map<string, Result[]>;
-} => {
+}> => {
   const races: Race[] = [];
   const results = new Map<string, Result[]>();
 
-  seasons.forEach((season) => {
-    const seasonRaces = getRaces(season);
+  for (const season of seasons) {
+    const seasonRaces = await getRaces(season);
     races.push(...seasonRaces);
 
-    seasonRaces.forEach((race) => {
-      const raceResults = getRaceResults(season, race.round);
+    for (const race of seasonRaces) {
+      const raceResults = await getRaceResults(season, race.round);
       if (raceResults.length > 0) {
         results.set(`${race.season}-${race.round}`, raceResults);
       }
-    });
-  });
+    }
+  }
 
   return { races, results };
 };
 
-export const getHistoricalMetric = (
+export const getHistoricalMetric = async (
   seasons: number[],
   metric: 'points' | 'wins' | 'podiums' | 'averageFinish' | 'averageGrid' | 'DNFs' | 'positionsGained',
   entityType: 'drivers' | 'teams',
   entityId?: string
-): HistoricalMetric[] => {
+): Promise<HistoricalMetric[]> => {
   const metrics: HistoricalMetric[] = [];
-  const entities = entityType === 'drivers' ? DRIVERS : TEAMS;
-  const targetEntities = entityId ? entities.filter((e) => e.id === entityId) : entities;
+  if (!driversCache || !teamsCache) {
+    throw new Error('Data caches not initialized. Please wait for data to load.');
+  }
+  const entities = entityType === 'drivers' ? driversCache : teamsCache;
+  const targetEntities = entityId ? entities.filter((e: Driver | Team) => e.id === entityId) : entities;
 
-  seasons.forEach((season) => {
-    const races = getRaces(season).filter((r) => r.completed);
+  for (const season of seasons) {
+    const races = (await getRaces(season)).filter((r) => r.completed);
 
-    targetEntities.forEach((entity) => {
-      races.forEach((race) => {
+    for (const entity of targetEntities) {
+      for (const race of races) {
         let value = 0;
 
         if (entityType === 'drivers') {
           const driver = entity as Driver;
-          const result = getRaceResults(season, race.round).find((r) => r.driverId === driver.id);
+          const results = await getRaceResults(season, race.round);
+          const result = results.find((r) => r.driverId === driver.id);
 
           if (result) {
             switch (metric) {
@@ -206,8 +287,12 @@ export const getHistoricalMetric = (
           }
         } else {
           const team = entity as Team;
-          const teamDrivers = DRIVERS.filter((d) => d.teamId === team.id);
-          const teamResults = getRaceResults(season, race.round).filter((r) =>
+          if (!driversCache) {
+            continue; // Skip if cache not ready
+          }
+          const teamDrivers = driversCache.filter((d) => d.teamId === team.id);
+          const raceResults = await getRaceResults(season, race.round);
+          const teamResults = raceResults.filter((r) =>
             teamDrivers.some((d) => d.id === r.driverId)
           );
 
@@ -249,21 +334,21 @@ export const getHistoricalMetric = (
             value,
           });
         }
-      });
-    });
-  });
+      }
+    }
+  }
 
   return metrics;
 };
 
-export const getCircuitHistory = (circuitId: string, years: number = 5): Array<{
+export const getCircuitHistory = async (circuitId: string, years: number = 5): Promise<Array<{
   season: number;
   race: Race;
   winner: Driver | null;
   pole: Driver | null;
   safetyCars: number;
   notableStat?: string;
-}> => {
+}>> => {
   const history: Array<{
     season: number;
     race: Race;
@@ -276,12 +361,12 @@ export const getCircuitHistory = (circuitId: string, years: number = 5): Array<{
   const currentYear = new Date().getFullYear();
   const seasons = Array.from({ length: years }, (_, i) => currentYear - i);
 
-  seasons.forEach((season) => {
-    const races = getRaces(season);
+  for (const season of seasons) {
+    const races = await getRaces(season);
     const race = races.find((r) => r.circuitId === circuitId && r.completed);
 
     if (race) {
-      const results = getRaceResults(season, race.round);
+      const results = await getRaceResults(season, race.round);
       const winnerResult = results.find((r) => r.finishPosition === 1);
       const poleResult = results.find((r) => r.grid === 1);
 
@@ -294,7 +379,7 @@ export const getCircuitHistory = (circuitId: string, years: number = 5): Array<{
         notableStat: race.DNFs > 3 ? `High attrition: ${race.DNFs} DNFs` : undefined,
       });
     }
-  });
+  }
 
   return history.sort((a, b) => b.season - a.season);
 };
