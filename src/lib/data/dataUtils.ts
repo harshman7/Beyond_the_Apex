@@ -1,6 +1,6 @@
 /**
  * Data utility functions for querying F1 data
- * Now uses Ergast API with fallback to mock data
+ * Uses OpenF1 API exclusively - no mock data fallbacks
  */
 
 import type {
@@ -11,9 +11,7 @@ import type {
   Result,
   HistoricalMetric,
 } from '@/types';
-import {
-  CURRENT_SEASON,
-} from './mockData';
+import { CURRENT_SEASON } from '../constants';
 import {
   getRacesFromAPI,
   getRaceResultsFromAPI,
@@ -102,6 +100,11 @@ export const getRace = async (season: number, round: number): Promise<Race | und
 };
 
 export const getRaces = async (season: number): Promise<Race[]> => {
+  // Ensure caches are initialized
+  if (!initialized) {
+    console.log('[getRaces] ⏳ Waiting for cache initialization...');
+    await initializeCaches();
+  }
   let races = racesCache.get(season);
   if (!races) {
     races = await getRacesFromAPI(season);
@@ -111,6 +114,11 @@ export const getRaces = async (season: number): Promise<Race[]> => {
 };
 
 export const getNextRace = async (): Promise<Race | undefined> => {
+  // Ensure caches are initialized
+  if (!initialized) {
+    console.log('[getNextRace] ⏳ Waiting for cache initialization...');
+    await initializeCaches();
+  }
   const races = await getRaces(CURRENT_SEASON);
   return races.find((r) => !r.completed);
 };
@@ -163,6 +171,11 @@ export const getSeasonStandings = async (season: number): Promise<{
   drivers: Array<{ driver: Driver; points: number; position: number }>;
   teams: Array<{ team: Team; points: number; position: number }>;
 }> => {
+  // Ensure caches are initialized
+  if (!initialized) {
+    console.log('[getSeasonStandings] ⏳ Waiting for cache initialization...');
+    await initializeCaches();
+  }
   const races = await getRaces(season);
   const driverPoints = new Map<string, number>();
   const teamPoints = new Map<string, number>();
@@ -385,5 +398,5 @@ export const getCircuitHistory = async (circuitId: string, years: number = 5): P
 };
 
 // Re-export CURRENT_SEASON for convenience
-export { CURRENT_SEASON } from './mockData';
+export { CURRENT_SEASON } from '../constants';
 

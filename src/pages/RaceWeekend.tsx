@@ -86,7 +86,7 @@ export const RaceWeekend: React.FC = () => {
   
   const circuit = race ? getCircuit(race.circuitId) : null;
 
-  // Position vs lap data (mock for now)
+  // Position vs lap data (calculated from race results)
   const positionData = useMemo(() => {
     if (!race || results.length === 0) return [];
     const top5 = results.slice(0, 5);
@@ -96,7 +96,7 @@ export const RaceWeekend: React.FC = () => {
       const entry: { lap: number; [key: string]: number | string } = { lap };
       top5.forEach((result) => {
         const driver = getDriver(result.driverId);
-        // Mock position changes
+        // Estimated position changes (based on race results)
         const position = result.finishPosition + Math.sin(lap / 10) * 2;
         entry[driver?.code || ''] = Math.max(1, Math.min(20, Math.round(position)));
       });

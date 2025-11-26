@@ -24,12 +24,9 @@ import type {
   DriverTitleProbability,
   TeamTitleProbability,
 } from '@/types';
-import {
-  DRIVERS,
-  TEAMS,
-  CURRENT_SEASON,
-  RACES_BY_SEASON,
-} from '../data/mockData';
+import { CURRENT_SEASON } from '../constants';
+import { getRaces } from '../data/dataUtils';
+import { getDriversFromAPI } from '../api/f1DataService';
 import {
   getRaceResults,
   getDriverResults,
@@ -42,11 +39,22 @@ import {
  * Calculate driver's recent form score (0-1)
  * Higher score = better recent performance
  */
-const calculateRecentForm = (driverId: string, races: number = 5): number => {
+const calculateRecentForm = async (driverId: string, season: number, races: number = 5): Promise<number> => {
   const driver = getDriver(driverId);
-  if (!driver || driver.last5Results.length === 0) return 0.5;
+  if (!driver) return 0.5;
 
-  const recentResults = driver.last5Results.slice(-races);
+  // Get driver's recent results from API
+  const driverResults = await getDriverResults(season, driverId);
+  if (driverResults.length === 0) return 0.5;
+
+  // Get last N race positions
+  const recentResults = driverResults
+    .slice(-races)
+    .map(r => r.finishPosition)
+    .filter(pos => pos > 0 && pos <= 20);
+  
+  if (recentResults.length === 0) return 0.5;
+  
   const avgPosition = recentResults.reduce((sum, pos) => sum + pos, 0) / recentResults.length;
   
   // Normalize: P1 = 1.0, P20 = 0.0
@@ -63,8 +71,8 @@ const calculateTeamPerformance = async (teamId: string): Promise<number> => {
   if (!teamStanding) return 0.5;
   
   // Normalize: P1 = 1.0, P10 = 0.0
-  const maxTeams = TEAMS.length;
-  return Math.max(0, 1 - (teamStanding.position - 1) / (maxTeams - 1));
+  const maxTeams = standings.teams.length;
+  return Math.max(0, 1 - (teamStanding.position - 1) / Math.max(1, maxTeams - 1));
 };
 
 /**
@@ -94,8 +102,8 @@ const calculateTrackPerformance = async (driverId: string, circuitId: string): P
  * Calculate qualifying vs race pace delta
  * Positive = better race pace, negative = better quali pace
  */
-const calculatePaceDelta = async (driverId: string): Promise<number> => {
-  const results = await getDriverResults(CURRENT_SEASON, driverId);
+const calculatePaceDelta = async (driverId: string, season: number = CURRENT_SEASON): Promise<number> => {
+  const results = await getDriverResults(season, driverId);
   if (results.length === 0) return 0;
 
   const avgGrid = results.reduce((sum: number, r: any) => sum + r.grid, 0) / results.length;
@@ -111,16 +119,20 @@ export const getRacePredictions = async (
   season: number,
   round: number
 ): Promise<DriverPrediction[]> => {
-  const race = RACES_BY_SEASON.get(season)?.find((r) => r.round === round);
+  const races = await getRaces(season);
+  const race = races.find((r) => r.round === round);
   if (!race) return [];
+
+  const drivers = await getDriversFromAPI(season);
+  if (drivers.length === 0) return [];
 
   const predictions: DriverPrediction[] = [];
 
-  for (const driver of DRIVERS) {
-    const recentForm = calculateRecentForm(driver.id);
+  for (const driver of drivers) {
+    const recentForm = await calculateRecentForm(driver.id, season);
     const teamPerf = await calculateTeamPerformance(driver.teamId);
     const trackPerf = await calculateTrackPerformance(driver.id, race.circuitId);
-    const paceDelta = await calculatePaceDelta(driver.id);
+    const paceDelta = await calculatePaceDelta(driver.id, season);
 
     // Weighted combination
     const baseScore = 
@@ -167,7 +179,8 @@ export const getQualiPredictions = async (
   season: number,
   round: number
 ): Promise<QualifyingPrediction[]> => {
-  const race = RACES_BY_SEASON.get(season)?.find((r) => r.round === round);
+  const races = await getRaces(season);
+  const race = races.find((r) => r.round === round);
   if (!race) return [];
 
   const racePredictions = await getRacePredictions(season, round);
@@ -175,7 +188,7 @@ export const getQualiPredictions = async (
   // Qualifying is similar but with slight adjustments
   const qualiPreds: QualifyingPrediction[] = [];
   for (const pred of racePredictions) {
-    const paceDelta = await calculatePaceDelta(pred.driverId);
+    const paceDelta = await calculatePaceDelta(pred.driverId, season);
     
     // Drivers with better quali pace get slight boost
     const qualiAdjustment = paceDelta < 0 ? -1 : paceDelta > 2 ? 1 : 0;
@@ -205,7 +218,7 @@ export const getSeasonOutcomeProbabilities = async (
   season: number
 ): Promise<SeasonOutcomeProbabilities> => {
   const standings = await getSeasonStandings(season);
-  const races = RACES_BY_SEASON.get(season) || [];
+  const races = await getRaces(season);
   const completedRaces = races.filter((r) => r.completed).length;
   const totalRaces = races.length;
   const remainingRaces = totalRaces - completedRaces;
@@ -222,7 +235,7 @@ export const getSeasonOutcomeProbabilities = async (
       ? currentPoints - (standings.drivers[1]?.points || 0)
       : (standings.drivers[0]?.points || 0) - currentPoints;
 
-    const formScore = calculateRecentForm(driver.id);
+    const formScore = await calculateRecentForm(driver.id, season);
     const teamScore = await calculateTeamPerformance(driver.teamId);
     // teamScore is used in titleProbability calculation below
 

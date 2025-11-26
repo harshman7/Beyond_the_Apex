@@ -2,12 +2,12 @@
 
 ## Current Implementation
 
-The application now uses the **Ergast API** (http://ergast.com/api/f1/) for real F1 data with automatic fallback to mock data if the API fails.
+The application now uses the **OpenF1 API** (https://api.openf1.org) exclusively for real F1 data. No mock data fallbacks are used.
 
 ## Features
 
 - ✅ Real-time F1 data from Ergast API
-- ✅ Automatic fallback to mock data on API errors
+- ✅ Real-time data from OpenF1 API (no mock data)
 - ✅ Response caching (5 minutes)
 - ✅ Loading states and error handling
 - ✅ Custom React hooks for data fetching
@@ -55,8 +55,8 @@ Then update `ERGAST_BASE_URL` to point to your backend.
 In `src/lib/api/f1DataService.ts`:
 
 ```typescript
-const USE_API = true; // Set to false to always use mock data
-const USE_MOCK_FALLBACK = true; // Fallback to mock on API errors
+const USE_API = true; // Always true - API is required
+// No mock data fallback - application uses only real API data
 ```
 
 ### Cache Duration
@@ -127,7 +127,7 @@ If you want to use different APIs:
 ## Testing
 
 1. **Test with API enabled**: Verify data loads from Ergast
-2. **Test fallback**: Disable network or set `USE_API = false` to test mock data
+2. **Test API errors**: Check browser console for API error messages
 3. **Test error handling**: Simulate API errors to verify fallback works
 
 ## Performance

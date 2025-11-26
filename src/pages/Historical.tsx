@@ -16,7 +16,8 @@ import { exportToCSV, exportToJSON } from '@/lib/utils/export';
 import { getHistoricalMetric } from '@/lib/data/dataUtils';
 import type { HistoricalMetric } from '@/types';
 import { getPredictionAccuracy } from '@/lib/predictions/predictionEngine';
-import { DRIVERS, TEAMS, CURRENT_SEASON } from '@/lib/data/mockData';
+import { CURRENT_SEASON } from '@/lib/constants';
+import { getDriversFromAPI, getTeamsFromAPI } from '@/lib/api/f1DataService';
 import { getDriver, getTeam } from '@/lib/data/dataUtils';
 
 export const Historical: React.FC = () => {
@@ -24,8 +25,26 @@ export const Historical: React.FC = () => {
   const [metric, setMetric] = useState<'points' | 'wins' | 'podiums' | 'averageFinish' | 'averageGrid' | 'DNFs' | 'positionsGained'>('points');
   const [entityType, setEntityType] = useState<'drivers' | 'teams'>('drivers');
   const [selectedEntity, setSelectedEntity] = useState<string>('all');
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
 
   const [historicalData, setHistoricalData] = useState<Array<{ round: number; [key: string]: number | string }>>([]);
+
+  useEffect(() => {
+    const loadEntities = async () => {
+      try {
+        const [driversData, teamsData] = await Promise.all([
+          getDriversFromAPI(CURRENT_SEASON),
+          getTeamsFromAPI(CURRENT_SEASON),
+        ]);
+        setDrivers(driversData);
+        setTeams(teamsData);
+      } catch (error) {
+        console.error('Error loading entities:', error);
+      }
+    };
+    loadEntities();
+  }, []);
 
   // Historical metric data
   useEffect(() => {
@@ -173,11 +192,9 @@ export const Historical: React.FC = () => {
           onChange={(e) => setSelectedEntity(e.target.value)}
         >
           <option value="all">All</option>
-          {(entityType === 'drivers' ? DRIVERS : TEAMS).map((entity) => (
+          {(entityType === 'drivers' ? drivers : teams).map((entity) => (
             <option key={entity.id} value={entity.id}>
-              {entityType === 'drivers' 
-                ? (entity as typeof DRIVERS[0]).name
-                : (entity as typeof TEAMS[0]).name}
+              {entity.name}
             </option>
           ))}
         </Select>
@@ -202,7 +219,7 @@ export const Historical: React.FC = () => {
                 }}
               />
               <Legend />
-              {selectedEntity === 'all' && entityType === 'drivers' && DRIVERS.slice(0, 5).map((driver) => (
+              {selectedEntity === 'all' && entityType === 'drivers' && drivers.slice(0, 5).map((driver) => (
                 <Line
                   key={driver.id}
                   type="monotone"
@@ -212,7 +229,7 @@ export const Historical: React.FC = () => {
                   dot={{ r: 3 }}
                 />
               ))}
-              {selectedEntity === 'all' && entityType === 'teams' && TEAMS.slice(0, 5).map((team) => (
+              {selectedEntity === 'all' && entityType === 'teams' && teams.slice(0, 5).map((team) => (
                 <Line
                   key={team.id}
                   type="monotone"

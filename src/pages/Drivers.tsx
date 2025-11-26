@@ -19,13 +19,13 @@ import { Button } from '@/components/ui/Button';
 import { exportDriverStandings, exportRaceResults } from '@/lib/utils/export';
 import { getDriverPerformanceBreakdown } from '@/lib/utils/analytics';
 import { Download } from 'lucide-react';
-import { DRIVERS, TEAMS } from '@/lib/data/mockData';
 import {
   getDriverResults,
   getSeasonStandings,
   getNextRace,
   CURRENT_SEASON,
 } from '@/lib/data/dataUtils';
+import { getDriversFromAPI, getTeamsFromAPI } from '@/lib/api/f1DataService';
 import { getRacePredictions } from '@/lib/predictions/predictionEngine';
 import { getDriver, getTeam } from '@/lib/data/dataUtils';
 import type { Driver, Team } from '@/types';
@@ -39,18 +39,28 @@ export const Drivers: React.FC = () => {
   const [nextRace, setNextRace] = useState<any>(null);
   const [driverResults, setDriverResults] = useState<any[]>([]);
   const [nextRacePrediction, setNextRacePrediction] = useState<any>(null);
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [standingsData, nextRaceData] = await Promise.all([
+        setLoading(true);
+        const [standingsData, nextRaceData, driversData, teamsData] = await Promise.all([
           getSeasonStandings(CURRENT_SEASON),
           getNextRace(),
+          getDriversFromAPI(CURRENT_SEASON),
+          getTeamsFromAPI(CURRENT_SEASON),
         ]);
         setStandings(standingsData);
         setNextRace(nextRaceData);
+        setDrivers(driversData);
+        setTeams(teamsData);
       } catch (error) {
         console.error('Error loading drivers data:', error);
+      } finally {
+        setLoading(false);
       }
     };
     loadData();
@@ -78,7 +88,8 @@ export const Drivers: React.FC = () => {
 
   // Filter drivers
   const filteredDrivers = useMemo(() => {
-    return DRIVERS.filter((driver) => {
+    if (loading || drivers.length === 0) return [];
+    return drivers.filter((driver) => {
       const matchesSearch =
         driver.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         driver.code.toLowerCase().includes(searchTerm.toLowerCase());
@@ -88,11 +99,17 @@ export const Drivers: React.FC = () => {
 
       return matchesSearch && matchesTeam && matchesNationality;
     });
-  }, [searchTerm, teamFilter, nationalityFilter]);
+  }, [drivers, searchTerm, teamFilter, nationalityFilter, loading]);
 
   const nationalities = useMemo(() => {
-    return Array.from(new Set(DRIVERS.map((d) => d.nationality))).sort();
-  }, []);
+    if (drivers.length === 0) return [];
+    return Array.from(new Set(drivers.map((d) => d.nationality))).sort();
+  }, [drivers]);
+
+  const teamOptions = useMemo(() => {
+    if (teams.length === 0) return [];
+    return teams.map(t => ({ value: t.id, label: t.name }));
+  }, [teams]);
 
   const driver = selectedDriver ? getDriver(selectedDriver) : null;
 
@@ -381,9 +398,9 @@ export const Drivers: React.FC = () => {
           className="min-w-[150px]"
         >
           <option value="all">All Teams</option>
-          {TEAMS.map((team) => (
-            <option key={team.id} value={team.id}>
-              {team.name}
+          {teamOptions.map((team) => (
+            <option key={team.value} value={team.value}>
+              {team.label}
             </option>
           ))}
         </Select>

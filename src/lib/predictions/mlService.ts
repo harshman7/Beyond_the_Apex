@@ -187,64 +187,71 @@ class MLPredictionService {
   }
   
   /**
-   * Transform model output to DriverPrediction[]
+   * Scale features to match training data scaling
+   * In production, load the saved scaler. For now, do basic normalization.
    */
-  private transformPredictions(
-    modelOutput: Float32Array | Int32Array | Uint8Array,
+  private scaleFeatures(features: number[][]): number[][] {
+    if (features.length === 0) return features;
+    
+    const numFeatures = features[0].length;
+    const scaled: number[][] = [];
+    
+    // Calculate mean and std for each feature across all drivers
+    for (let i = 0; i < numFeatures; i++) {
+      const featureValues = features.map(f => f[i]);
+      const mean = featureValues.reduce((a, b) => a + b, 0) / featureValues.length;
+      const variance = featureValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / featureValues.length;
+      const std = Math.sqrt(variance) || 1; // Avoid division by zero
+      
+      // Standardize: (x - mean) / std
+      for (let j = 0; j < features.length; j++) {
+        if (!scaled[j]) scaled[j] = [];
+        scaled[j][i] = (features[j][i] - mean) / std;
+      }
+    }
+    
+    return scaled;
+  }
+  
+  /**
+   * Transform model output matrix to DriverPrediction[]
+   * Model output is [num_drivers][20] where each row is probability distribution over 20 positions (0-19)
+   */
+  private transformPredictionsFromMatrix(
+    predictionMatrix: number[][],
     drivers: Driver[]
   ): DriverPrediction[] {
     const predictions: DriverPrediction[] = [];
-    const outputArray = Array.from(modelOutput);
     
-    // Model output should be probabilities for each position (1-20) for each driver
-    // Or it could be a single position prediction per driver
-    // Assuming model outputs position probabilities: [driver1_pos1_prob, driver1_pos2_prob, ..., driver20_pos20_prob]
-    // That would be 20 drivers * 20 positions = 400 values
-    
-    // For simplicity, let's assume model outputs expected position per driver (20 values)
-    // Or probabilities for top 3 positions per driver
-    
-    // If output is 20 values (one per driver), treat as expected positions
-    if (outputArray.length === drivers.length) {
-      drivers.forEach((driver, index) => {
-        const expectedPosition = Math.max(1, Math.min(20, Math.round(outputArray[index])));
-        const positionProb = 1 - Math.abs(outputArray[index] - expectedPosition); // Confidence based on how close to integer
-        
-        predictions.push({
-          driverId: driver.id,
-          expectedFinishPosition: expectedPosition,
-          winProbability: expectedPosition === 1 ? 0.8 : expectedPosition <= 3 ? 0.3 : 0.05,
-          podiumProbability: expectedPosition <= 3 ? 0.7 : expectedPosition <= 5 ? 0.3 : 0.1,
-          pointsProjection: this.calculatePoints(expectedPosition),
-          confidenceScore: Math.min(1, Math.max(0, positionProb)),
-          reasoning: `ML model prediction: Expected position ${expectedPosition}`,
-        });
-      });
-    } else {
-      // Fallback: use output as position scores and rank drivers
-      const driverScores = drivers.map((driver, index) => ({
-        driver,
-        score: index < outputArray.length ? outputArray[index] : 0.5,
-      }));
+    // predictionMatrix shape: [num_drivers][20]
+    // Each row contains probabilities for positions 0-19 (representing actual positions 1-20)
+    for (let i = 0; i < drivers.length && i < predictionMatrix.length; i++) {
+      const driverProbs = predictionMatrix[i];
       
-      driverScores.sort((a, b) => b.score - a.score);
+      // Find the position class (0-19) with highest probability
+      const predictedClass = driverProbs.indexOf(Math.max(...driverProbs));
+      const expectedPosition = predictedClass + 1; // Convert from 0-19 to 1-20
+      const confidence = driverProbs[predictedClass];
       
-      driverScores.forEach((item, index) => {
-        const expectedPosition = index + 1;
-        predictions.push({
-          driverId: item.driver.id,
-          expectedFinishPosition: expectedPosition,
-          winProbability: expectedPosition === 1 ? 0.8 : expectedPosition <= 3 ? 0.3 : 0.05,
-          podiumProbability: expectedPosition <= 3 ? 0.7 : expectedPosition <= 5 ? 0.3 : 0.1,
-          pointsProjection: this.calculatePoints(expectedPosition),
-          confidenceScore: Math.min(1, Math.max(0, item.score)),
-          reasoning: `ML model prediction: Ranked ${expectedPosition} based on model score`,
-        });
+      // Calculate probabilities
+      const winProbability = driverProbs[0] || 0; // Probability of position 1 (class 0)
+      const podiumProbability = (driverProbs[0] || 0) + (driverProbs[1] || 0) + (driverProbs[2] || 0); // Sum of P1, P2, P3
+      
+      predictions.push({
+        driverId: drivers[i].id,
+        expectedFinishPosition: expectedPosition,
+        winProbability,
+        podiumProbability,
+        pointsProjection: this.calculatePoints(expectedPosition),
+        confidenceScore: Math.min(1, Math.max(0, confidence)),
+        reasoning: `ML model prediction: Expected position ${expectedPosition} (confidence: ${(confidence * 100).toFixed(1)}%)`,
       });
     }
     
+    // Sort by expected position
     return predictions.sort((a, b) => a.expectedFinishPosition - b.expectedFinishPosition);
   }
+  
   
   /**
    * Calculate points for a finish position
@@ -349,21 +356,30 @@ class MLPredictionService {
         featuresArray.push(features);
       }
       
+      // Scale features (same as training)
+      // Note: In production, you'd load the scaler from the saved file
+      // For now, we'll do basic normalization
+      const scaledFeatures = this.scaleFeatures(featuresArray);
+      
       // Convert to TensorFlow tensor
-      const inputTensor = tf.tensor2d(featuresArray);
+      // Shape: [num_drivers, 24_features]
+      const inputTensor = tf.tensor2d(scaledFeatures);
       console.log(`[MLService] 📊 Input tensor shape: ${inputTensor.shape}`);
       
       // Make prediction
+      // Output shape: [num_drivers, 20] where each row is probability distribution over 20 positions (0-19)
       console.log('[MLService] 🧠 Running model inference...');
       const prediction = model.predict(inputTensor) as tf.Tensor;
-      const predictionData = await prediction.data();
+      const predictionMatrix = await prediction.array() as number[][];
+      console.log(`[MLService] 📊 Output shape: [${predictionMatrix.length}, ${predictionMatrix[0]?.length || 0}]`);
       
       // Clean up tensors
       inputTensor.dispose();
       prediction.dispose();
       
       // Transform predictions
-      const predictions = this.transformPredictions(predictionData, drivers);
+      // predictionMatrix is [num_drivers][20] - each driver has 20 position probabilities
+      const predictions = this.transformPredictionsFromMatrix(predictionMatrix, drivers);
       
       console.log(`[MLService] ✅ TensorFlow.js predictions generated for ${predictions.length} drivers`);
       return predictions;

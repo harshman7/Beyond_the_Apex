@@ -1,9 +1,8 @@
 /**
  * F1 Data Service - Main interface for fetching F1 data
- * Uses OpenF1 API (modern) with fallback to Ergast API, then mock data
+ * Uses OpenF1 API exclusively - no fallbacks to mock data
  * 
  * OpenF1 API: https://api.openf1.org (modern, free, no CORS issues)
- * Ergast API: http://ergast.com/api/f1 (deprecated end of 2024, fallback)
  */
 
 import type {
@@ -29,9 +28,7 @@ import {
   transformOpenF1Stint,
   calculateFinalPositions,
 } from './openF1Transformers';
-import {
-  CURRENT_SEASON,
-} from '../data/mockData';
+import { CURRENT_SEASON } from '../constants';
 
 // Configuration - OpenF1 API only, no fallbacks
 const USE_API = true;

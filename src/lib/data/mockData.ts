@@ -1,10 +1,14 @@
 /**
- * Mock F1 Data - Fallback data structure
+ * DEPRECATED: Mock F1 Data - NOT USED IN PRODUCTION
  * 
- * NOTE: The app now uses OpenF1 API for real-time data (see src/lib/api/f1DataService.ts)
- * This mock data is kept as a reference structure and for development/testing purposes.
+ * ⚠️ This file is kept for reference only. The application now uses ONLY real data from OpenF1 API.
  * 
- * The OpenF1 API integration is complete and active in production.
+ * All data fetching is done through:
+ * - src/lib/api/f1DataService.ts - Main data service (OpenF1 API only)
+ * - src/lib/data/dataUtils.ts - Data utilities (API only, no fallbacks)
+ * 
+ * This file should not be imported or used anywhere in the codebase.
+ * Only CURRENT_SEASON constant has been moved to src/lib/constants.ts
  */
 
 import type {

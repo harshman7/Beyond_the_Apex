@@ -67,7 +67,7 @@ src/
 │   │   ├── rateLimiter.ts       # Rate limiting utility
 │   │   └── f1DataService.ts     # Main data service with caching
 │   ├── data/            # Data layer
-│   │   ├── mockData.ts  # Mock F1 data (for reference)
+│   │   ├── mockData.ts  # Legacy file (not used - all data from API)
 │   │   ├── dataUtils.ts # Data query utilities
 │   │   └── telemetry.ts # WebSocket telemetry client
 │   ├── predictions/     # Prediction engine
@@ -141,13 +141,11 @@ The application uses **OpenF1 API** exclusively for real-time F1 data:
 #### Option 3: Custom Microservice
 Build your own data aggregation service that combines multiple sources.
 
-**See `API_INTEGRATION.md` for detailed integration guide.**
-
-**See `ML_INTEGRATION_GUIDE.md` for comprehensive ML model integration guide.**
+**See `API_INTEGRATION.md` for detailed API integration guide.**
 
 **See `TENSORFLOW_MODEL_GUIDE.md` for TensorFlow.js model training guide.**
 
-**See `TENSORFLOW_IMPLEMENTATION.md` for implementation details.**
+**See `FASTF1_BACKEND.md` for FastF1 Python backend integration.**
 
 ## Prediction Engine
 

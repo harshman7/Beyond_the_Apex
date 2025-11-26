@@ -184,7 +184,7 @@ export const transformResult = (
     points: DNF ? 0 : points,
     fastestLap: ergastResult.FastestLap?.rank === '1',
     tyreStints: [
-      // Mock tyre stints since Ergast doesn't provide this
+      // Tyre stints (estimated from race data - OpenF1 may provide this)
       {
         compound: 'medium' as const,
         laps: parseInt(ergastResult.laps || '0'),

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { useTheme } from '@/hooks/useTheme';
-import { CURRENT_SEASON } from '@/lib/data/mockData';
+import { CURRENT_SEASON } from '@/lib/constants';
 import { refreshAllData, refreshRaces, refreshDrivers, refreshTeams } from '@/lib/utils/refresh';
 import { mlPredictionService } from '@/lib/predictions/mlService';
 

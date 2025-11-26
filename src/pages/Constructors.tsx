@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { StatCard } from '@/components/ui/StatCard';
 import { Button } from '@/components/ui/Button';
-import { TEAMS, DRIVERS } from '@/lib/data/mockData';
+import { getTeamsFromAPI, getDriversFromAPI } from '@/lib/api/f1DataService';
 import {
   getSeasonStandings,
   CURRENT_SEASON,
@@ -24,16 +24,22 @@ import { refreshTeams } from '@/lib/utils/refresh';
 export const Constructors: React.FC = () => {
   const [standings, setStandings] = useState<{ drivers: Array<{ driver: any; points: number; position: number }>; teams: Array<{ team: any; points: number; position: number }> } | null>(null);
   const [seasonProbs, setSeasonProbs] = useState<any>(null);
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [standingsData, probsData] = await Promise.all([
+        const [standingsData, probsData, driversData, teamsData] = await Promise.all([
           getSeasonStandings(CURRENT_SEASON),
           getSeasonOutcomeProbabilities(CURRENT_SEASON),
+          getDriversFromAPI(CURRENT_SEASON),
+          getTeamsFromAPI(CURRENT_SEASON),
         ]);
         setStandings(standingsData);
         setSeasonProbs(probsData);
+        setDrivers(driversData);
+        setTeams(teamsData);
       } catch (error) {
         console.error('Error loading constructors data:', error);
       }
@@ -43,21 +49,24 @@ export const Constructors: React.FC = () => {
 
   // Driver contributions to team points
   const driverContributions = useMemo(() => {
+    if (!standings || drivers.length === 0 || teams.length === 0) return [];
+    
     const data: Array<{ team: string; [key: string]: number | string }> = [];
 
-    TEAMS.forEach((team) => {
-      const teamDrivers = DRIVERS.filter((d) => d.teamId === team.id);
+    teams.forEach((team) => {
+      const teamDrivers = drivers.filter((d) => d.teamId === team.id);
       const entry: { team: string; [key: string]: number | string } = { team: team.name };
 
       teamDrivers.forEach((driver) => {
-        entry[driver.code] = driver.points;
+        const driverStanding = standings.drivers.find((s) => s.driver.id === driver.id);
+        entry[driver.code] = driverStanding?.points || 0;
       });
 
       data.push(entry);
     });
 
     return data;
-  }, []);
+  }, [standings, drivers, teams]);
 
   // Team outlook
   const teamOutlook = useMemo(() => {
@@ -124,7 +133,7 @@ export const Constructors: React.FC = () => {
             <tbody>
               {standings?.teams.map((standing: { team: any; points: number; position: number }) => {
                 const team = standing.team;
-                const teamDrivers = DRIVERS.filter((d) => d.teamId === team.id);
+                const teamDrivers = drivers.filter((d: any) => d.teamId === team.id);
                 return (
                   <tr key={team.id} className="border-b border-border hover:bg-accent">
                     <td className="p-2 text-sm font-semibold">{standing.position}</td>
@@ -139,7 +148,7 @@ export const Constructors: React.FC = () => {
                     </td>
                     <td className="p-2 text-sm text-muted-foreground">{team.engine}</td>
                     <td className="p-2 text-sm">
-                      {teamDrivers.map((d) => d.code).join(', ')}
+                      {teamDrivers.map((d: any) => d.code).join(', ')}
                     </td>
                     <td className="p-2 text-sm font-semibold">{standing.points}</td>
                     <td className="p-2 text-sm">{team.wins}</td>
@@ -169,7 +178,7 @@ export const Constructors: React.FC = () => {
                 }}
               />
               <Legend />
-              {DRIVERS.map((driver) => {
+              {drivers.map((driver: any) => {
                 const team = getTeam(driver.teamId);
                 return (
                   <Bar
