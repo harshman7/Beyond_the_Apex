@@ -143,6 +143,8 @@ Build your own data aggregation service that combines multiple sources.
 
 **See `API_INTEGRATION.md` for detailed integration guide.**
 
+**See `ML_INTEGRATION_GUIDE.md` for comprehensive ML model integration guide.**
+
 ## Prediction Engine
 
 ### ✅ Current Implementation (Heuristic-Based)
