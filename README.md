@@ -10,7 +10,11 @@ A highly advanced Formula 1 analytics dashboard web application with predictions
 - **Constructors Page**: Team standings, driver contributions, and championship outlook
 - **Historical Analytics**: Deep dive into past results with customizable metrics and time ranges
 - **Predictions**: Season title odds, race predictions, and "what-if" scenario modeling
-- **Settings**: Theme customization and integration documentation
+- **Settings**: Theme customization, ML model configuration, and data management
+- **Data Export**: Export data to CSV or JSON format
+- **Data Refresh**: Manual cache clearing and data refresh
+- **Error Handling**: Global error boundary with graceful error recovery
+- **Real-Time Telemetry**: WebSocket client for live race weekend data (ready for integration)
 
 ## Tech Stack
 
@@ -52,15 +56,29 @@ A highly advanced Formula 1 analytics dashboard web application with predictions
 src/
 ├── components/          # Reusable UI components
 │   ├── layout/          # Layout components (Sidebar, TopBar, MainLayout)
-│   └── ui/              # Base UI components (Button, Input, Select, StatCard, etc.)
+│   └── ui/              # Base UI components (Button, Input, Select, StatCard, ErrorBoundary, etc.)
 ├── hooks/               # Custom React hooks
-│   └── useTheme.ts      # Theme management hook
+│   ├── useTheme.ts      # Theme management hook
+│   └── useTelemetry.ts  # Real-time telemetry hook
 ├── lib/                 # Core business logic
+│   ├── api/             # API clients and data service
+│   │   ├── openF1Client.ts      # OpenF1 API client
+│   │   ├── openF1Transformers.ts # OpenF1 data transformers
+│   │   ├── rateLimiter.ts       # Rate limiting utility
+│   │   └── f1DataService.ts     # Main data service with caching
 │   ├── data/            # Data layer
-│   │   ├── mockData.ts  # Mock F1 data (drivers, teams, circuits, races, results)
-│   │   └── dataUtils.ts # Data query utilities
-│   └── predictions/     # Prediction engine
-│       └── predictionEngine.ts  # Heuristic-based prediction algorithms
+│   │   ├── mockData.ts  # Mock F1 data (for reference)
+│   │   ├── dataUtils.ts # Data query utilities
+│   │   └── telemetry.ts # WebSocket telemetry client
+│   ├── predictions/     # Prediction engine
+│   │   ├── predictionEngine.ts  # Heuristic-based prediction algorithms
+│   │   └── mlService.ts         # ML prediction service interface
+│   └── utils/           # Utility functions
+│       ├── export.ts    # Data export (CSV/JSON)
+│       ├── refresh.ts   # Data refresh utilities
+│       ├── retry.ts     # Retry logic with backoff
+│       ├── analytics.ts # Advanced analytics calculations
+│       └── performance.ts # Performance optimization utilities
 ├── pages/               # Page components
 │   ├── Overview.tsx
 │   ├── RaceWeekend.tsx
@@ -78,16 +96,18 @@ src/
 
 ## Data Layer
 
-### ✅ Current Implementation (OpenF1 API + Ergast Fallback + Mock)
+### ✅ Current Implementation (OpenF1 API)
 
-The application now uses the **OpenF1 API** (modern, recommended) with fallback to Ergast API, then mock data:
+The application uses **OpenF1 API** exclusively for real-time F1 data:
 
 - ✅ **OpenF1 API** (https://api.openf1.org) - Modern, free, no CORS issues
-- ✅ **Ergast API fallback** (http://ergast.com/api/f1/) - Deprecated end of 2024, used as fallback
-- ✅ **Automatic fallback chain**: OpenF1 → Ergast → Mock data
-- ✅ **Response caching** (5 minutes)
-- ✅ **Loading states** and error handling
+- ✅ **Rate limiting** - Automatic throttling (400ms minimum interval) with exponential backoff retry logic
+- ✅ **Response caching** (5 minutes) for improved performance
+- ✅ **Loading states** and comprehensive error handling
 - ✅ **Custom React hooks** for data fetching
+- ✅ **Detailed logging** for debugging and monitoring
+- ✅ **Data refresh utilities** - Manual cache clearing and refresh
+- ✅ **Data export** - CSV and JSON export functionality
 
 **Why OpenF1 instead of FastF1?**
 - FastF1 is a Python library, not a REST API
@@ -95,18 +115,12 @@ The application now uses the **OpenF1 API** (modern, recommended) with fallback 
 - See `FASTF1_BACKEND.md` if you want to use FastF1 via a Python backend
 
 **Files:**
-- `src/lib/api/openF1Client.ts` - OpenF1 API client (primary)
+- `src/lib/api/openF1Client.ts` - OpenF1 API client
 - `src/lib/api/openF1Transformers.ts` - Transform OpenF1 responses
-- `src/lib/api/ergastClient.ts` - Ergast API client (fallback)
-- `src/lib/api/dataTransformers.ts` - Transform Ergast responses
+- `src/lib/api/rateLimiter.ts` - Rate limiting and retry logic
 - `src/lib/api/f1DataService.ts` - Main data service with caching
-- `src/hooks/useF1Data.ts` - React hooks for data fetching
-
-**Configuration:**
-- Enable/disable API: `src/lib/api/f1DataService.ts` → `USE_API`
-- Use OpenF1: `src/lib/api/f1DataService.ts` → `USE_OPENF1`
-- Ergast fallback: `src/lib/api/f1DataService.ts` → `USE_ERGAST_FALLBACK`
-- Cache duration: `src/lib/api/f1DataService.ts` → `CACHE_DURATION`
+- `src/lib/utils/refresh.ts` - Data refresh utilities
+- `src/lib/utils/export.ts` - Data export utilities (CSV/JSON)
 
 ### Alternative APIs
 
@@ -131,7 +145,7 @@ Build your own data aggregation service that combines multiple sources.
 
 ## Prediction Engine
 
-### Current Implementation (Heuristic-Based)
+### ✅ Current Implementation (Heuristic-Based)
 
 The prediction engine in `src/lib/predictions/predictionEngine.ts` uses weighted heuristics:
 
@@ -140,7 +154,27 @@ The prediction engine in `src/lib/predictions/predictionEngine.ts` uses weighted
 - **Track-Specific History**: 25%
 - **Qualifying vs Race Pace Delta**: 10%
 
-### Integrating ML Models
+### ✅ ML Prediction Service Interface
+
+A production-ready ML service abstraction is implemented in `src/lib/predictions/mlService.ts`:
+
+- ✅ **Service interface** - Clean abstraction for different ML backends
+- ✅ **Heuristic fallback** - Currently uses heuristic engine
+- ✅ **Configuration** - Configurable via Settings page
+- ✅ **Multiple backend support** - Ready for TensorFlow.js, PyTorch/TensorFlow API, or Cloud ML
+
+**Usage:**
+```typescript
+import { mlPredictionService } from '@/lib/predictions/mlService';
+
+// Configure (or use Settings page)
+mlPredictionService.configure({ modelType: 'heuristic' });
+
+// Get predictions
+const predictions = await mlPredictionService.predictRace(2024, 5);
+```
+
+### 🔮 Future: Integrating ML Models
 
 #### Option 1: TensorFlow.js (In-Browser)
 
@@ -156,7 +190,11 @@ const model = await tf.loadLayersModel('/models/f1-predictor.json');
 const prediction = model.predict(inputTensor);
 ```
 
-**TODO:** Replace heuristic functions in `predictionEngine.ts` with model inference
+**Integration Steps:**
+1. Install `@tensorflow/tfjs`: `npm install @tensorflow/tfjs`
+2. Train and export your model
+3. Update `predictWithTensorFlow` in `mlService.ts`
+4. Configure model URL in Settings page
 
 #### Option 2: PyTorch/TensorFlow Backend
 
@@ -164,8 +202,8 @@ Serve ML models via API:
 
 1. Train model using PyTorch/TensorFlow
 2. Deploy model as REST API (Flask/FastAPI)
-3. Create API client in `src/lib/predictions/mlApi.ts`
-4. Replace heuristic calls with API requests
+3. Configure endpoint and API key in Settings page
+4. Service automatically handles API calls
 
 #### Option 3: Cloud ML Services
 
@@ -175,31 +213,51 @@ Use managed ML services:
 - **Google Cloud ML**
 - **Azure Machine Learning**
 
-**TODO Locations:**
-- `src/lib/predictions/predictionEngine.ts` - Replace heuristics with ML model calls
-- Add model training scripts in separate repository
+**Current Status:**
+- ✅ Heuristic-based predictions implemented and working
+- ✅ ML service interface ready for integration
+- ✅ Configuration UI in Settings page
+- 🔮 Future: Implement actual ML model loading/inference
 
 ## Real-Time Telemetry
 
-For live race weekend data:
+### ✅ WebSocket Client Implementation
 
-1. **FastF1 WebSocket**: Use FastF1's live timing data
-2. **F1 Official API**: Requires API access
-3. **Custom WebSocket Service**: Build your own real-time data service
+A production-ready WebSocket telemetry client is implemented:
 
-**Implementation:**
+**Files:**
+- `src/lib/data/telemetry.ts` - WebSocket client with reconnection logic
+- `src/hooks/useTelemetry.ts` - React hook for telemetry data
+
+**Features:**
+- ✅ Automatic reconnection with exponential backoff
+- ✅ Event-based message handling (position, lap, sector, flag, safety_car, weather)
+- ✅ Type-safe message interfaces
+- ✅ Connection state management
+- ✅ React hook for easy component integration
+
+**Usage:**
 
 ```typescript
-// src/lib/data/telemetry.ts
-const ws = new WebSocket('wss://your-telemetry-service.com');
+// Using the React hook (recommended)
+import { useTelemetry } from '@/hooks/useTelemetry';
 
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  // Update application state
-};
+const { isConnected, data, connect, disconnect } = useTelemetry('wss://api.example.com/telemetry');
+
+// Or using the client directly
+import { createTelemetryClient } from '@/lib/data/telemetry';
+
+const client = createTelemetryClient('wss://your-telemetry-service.com');
+client.on('position', (data) => {
+  console.log('Position update:', data);
+});
+client.connect();
 ```
 
-**TODO:** Implement WebSocket client in `src/lib/data/telemetry.ts`
+**Data Sources:**
+- FastF1 WebSocket: Use FastF1's live timing data
+- F1 Official API: Requires API access
+- Custom WebSocket Service: Build your own real-time data service
 
 ## Styling
 
@@ -243,12 +301,48 @@ The project uses strict TypeScript. All types are defined in `src/types/index.ts
 4. Build pages in `src/pages/`
 5. Add routes in `src/App.tsx`
 
+## Enhancements & Utilities
+
+### ✅ Implemented Features
+
+- **Data Export**: Export standings, results, and analytics to CSV or JSON
+  - `src/lib/utils/export.ts` - Export utilities
+  - Available on Drivers, Constructors, Historical, and Race Weekend pages
+
+- **Data Refresh**: Manual cache clearing and data refresh
+  - `src/lib/utils/refresh.ts` - Refresh utilities
+  - Available in Settings page
+
+- **Error Handling**: Global error boundary for graceful error recovery
+  - `src/components/ui/ErrorBoundary.tsx` - Error boundary component
+  - Integrated in `App.tsx` for app-wide error catching
+
+- **Advanced Analytics**: Additional statistical calculations
+  - `src/lib/utils/analytics.ts` - Analytics utilities
+  - Includes consistency, reliability, momentum, and performance breakdowns
+
+- **Performance Utilities**: Optimization helpers
+  - `src/lib/utils/performance.ts` - Debounce, throttle, batch requests
+  - `src/lib/utils/retry.ts` - Retry logic with exponential backoff
+
+- **ML Prediction Service**: Production-ready ML service interface
+  - `src/lib/predictions/mlService.ts` - ML service abstraction
+  - Configurable via Settings page
+  - Ready for TensorFlow.js, PyTorch/TensorFlow API, or Cloud ML integration
+
+- **Real-Time Telemetry**: WebSocket client for live data
+  - `src/lib/data/telemetry.ts` - WebSocket client
+  - `src/hooks/useTelemetry.ts` - React hook for telemetry
+  - Automatic reconnection with exponential backoff
+
 ## Performance Considerations
 
 - **Code splitting**: Routes are automatically code-split by Vite
 - **Memoization**: Use `useMemo` and `useCallback` for expensive computations
 - **Lazy loading**: Consider lazy loading heavy components
-- **Data caching**: Implement caching for API responses
+- **Data caching**: Implement caching for API responses (5-minute cache)
+- **Rate limiting**: Automatic rate limiting for API requests (400ms minimum interval)
+- **Batch requests**: Utility for batching API requests
 
 ## Browser Support
 
@@ -275,4 +369,4 @@ MIT
 
 ---
 
-**Note**: This is a demonstration application using mock data. For production use, integrate real F1 data sources and ML models as described above.
+**Note**: This application uses OpenF1 API for real-time F1 data. ML model integration for predictions is a future enhancement as described above.

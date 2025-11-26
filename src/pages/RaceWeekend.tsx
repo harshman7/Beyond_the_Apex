@@ -12,8 +12,12 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/Button';
 import { getRaces, getRace, getRaceResults, getCircuitHistory, CURRENT_SEASON, getCircuit, getDriver, getTeam } from '@/lib/data/dataUtils';
-import { getRacePredictions, getQualiPredictions } from '@/lib/predictions/predictionEngine';
+import { mlPredictionService } from '@/lib/predictions/mlService';
+import { exportRaceResults } from '@/lib/utils/export';
+import { refreshRaceResults } from '@/lib/utils/refresh';
+import { RefreshCw, Download } from 'lucide-react';
 import type { Driver, Race, Result } from '@/types';
 
 export const RaceWeekend: React.FC = () => {
@@ -54,6 +58,8 @@ export const RaceWeekend: React.FC = () => {
     loadData();
   }, [season, round]);
 
+  const [refreshing, setRefreshing] = useState(false);
+
   useEffect(() => {
     const loadPredictions = async () => {
       if (!race) {
@@ -62,9 +68,10 @@ export const RaceWeekend: React.FC = () => {
         return;
       }
       try {
+        // Use ML service (currently uses heuristics, but can be switched to ML models)
         const [racePreds, qualiPreds] = await Promise.all([
-          getRacePredictions(season, round),
-          getQualiPredictions(season, round),
+          mlPredictionService.predictRace(season, round),
+          mlPredictionService.predictQualifying(season, round),
         ]);
         setRacePredictions(racePreds);
         setQualiPredictions(qualiPreds);
@@ -108,9 +115,45 @@ export const RaceWeekend: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Race Weekend</h1>
-        <p className="text-muted-foreground">Detailed analysis and predictions for race weekends</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Race Weekend</h1>
+          <p className="text-muted-foreground">Detailed analysis and predictions for race weekends</p>
+        </div>
+        {race && (
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                setRefreshing(true);
+                try {
+                  await refreshRaceResults(season, round);
+                  alert('Race results refreshed successfully!');
+                  window.location.reload();
+                } catch (error) {
+                  alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                } finally {
+                  setRefreshing(false);
+                }
+              }}
+              disabled={refreshing}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </Button>
+            {results.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportRaceResults(results, race.name)}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Controls */}
@@ -492,7 +535,8 @@ export const RaceWeekend: React.FC = () => {
                   <li>Qualifying vs race pace delta: 10%</li>
                 </ul>
                 <p className="text-sm text-muted-foreground mt-4">
-                  TODO: Replace with real ML models (TensorFlow, PyTorch, or external ML service)
+                  <strong>Future Enhancement:</strong> ML model integration (TensorFlow.js, PyTorch API, or cloud ML services) 
+                  can be added to improve prediction accuracy. See Settings page for details.
                 </p>
               </div>
             </div>

@@ -10,6 +10,9 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { Select } from '@/components/ui/Select';
+import { Button } from '@/components/ui/Button';
+import { Download } from 'lucide-react';
+import { exportToCSV, exportToJSON } from '@/lib/utils/export';
 import { getHistoricalMetric } from '@/lib/data/dataUtils';
 import type { HistoricalMetric } from '@/types';
 import { getPredictionAccuracy } from '@/lib/predictions/predictionEngine';
@@ -95,9 +98,36 @@ export const Historical: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Historical Analytics</h1>
-        <p className="text-muted-foreground">Deep dive into past results and trends</p>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Historical Analytics</h1>
+          <p className="text-muted-foreground">Deep dive into past results and trends</p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (historicalData.length > 0) {
+                exportToCSV(historicalData, `historical-${metric}-${entityType}`);
+              }
+            }}
+            disabled={historicalData.length === 0}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              exportToJSON({ historicalData, predictionAccuracy }, `historical-analytics-${CURRENT_SEASON}`);
+            }}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export JSON
+          </Button>
+        </div>
       </div>
 
       {/* Controls */}

@@ -12,12 +12,14 @@ import {
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import {
-  getSeasonOutcomeProbabilities,
   getRacePredictions,
 } from '@/lib/predictions/predictionEngine';
+import { mlPredictionService } from '@/lib/predictions/mlService';
 import { getRaces, getNextRace, CURRENT_SEASON, getTeam } from '@/lib/data/dataUtils';
 import { getDriver } from '@/lib/data/dataUtils';
 import { getTeamsFromAPI } from '@/lib/api/f1DataService';
+import { exportToJSON } from '@/lib/utils/export';
+import { Download } from 'lucide-react';
 import type { Race, Team } from '@/types';
 
 export const Predictions: React.FC = () => {
@@ -39,7 +41,8 @@ export const Predictions: React.FC = () => {
         setRaces(racesData);
         setNextRace(nextRaceData);
         setTeams(teamsData);
-        const probs = await getSeasonOutcomeProbabilities(season);
+        // Use ML service (currently uses heuristics, but can be switched to ML models)
+        const probs = await mlPredictionService.predictSeason(season);
         setSeasonProbs(probs);
       } catch (error) {
         console.error('Error loading predictions data:', error);
@@ -92,9 +95,29 @@ export const Predictions: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Predictions</h1>
-        <p className="text-muted-foreground">Championship odds and race predictions</p>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Predictions</h1>
+          <p className="text-muted-foreground">Championship odds and race predictions</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Using: {mlPredictionService.getConfig().modelType} model
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (seasonProbs) {
+                exportToJSON(seasonProbs, `predictions-${season}`);
+              }
+            }}
+            disabled={!seasonProbs}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export Predictions
+          </Button>
+        </div>
       </div>
 
       {!seasonProbs ? (

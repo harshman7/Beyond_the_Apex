@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { StatCard } from '@/components/ui/StatCard';
+import { Button } from '@/components/ui/Button';
 import { TEAMS, DRIVERS } from '@/lib/data/mockData';
 import {
   getSeasonStandings,
@@ -17,6 +18,8 @@ import {
 } from '@/lib/data/dataUtils';
 import { getSeasonOutcomeProbabilities } from '@/lib/predictions/predictionEngine';
 import { getTeam } from '@/lib/data/dataUtils';
+import { exportTeamStandings } from '@/lib/utils/export';
+import { refreshTeams } from '@/lib/utils/refresh';
 
 export const Constructors: React.FC = () => {
   const [standings, setStandings] = useState<{ drivers: Array<{ driver: any; points: number; position: number }>; teams: Array<{ team: any; points: number; position: number }> } | null>(null);
@@ -69,9 +72,37 @@ export const Constructors: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Constructors</h1>
-        <p className="text-muted-foreground">Team performance and championship standings</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Constructors</h1>
+          <p className="text-muted-foreground">Team performance and championship standings</p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                await refreshTeams(CURRENT_SEASON);
+                alert('Teams refreshed successfully!');
+                window.location.reload();
+              } catch (error) {
+                alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+              }
+            }}
+          >
+            Refresh
+          </Button>
+          {standings && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportTeamStandings(standings.teams)}
+            >
+              Export CSV
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Constructor Standings */}

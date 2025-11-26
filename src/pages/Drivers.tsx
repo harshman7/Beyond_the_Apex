@@ -16,6 +16,9 @@ import { StatCard } from '@/components/ui/StatCard';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
+import { exportDriverStandings, exportRaceResults } from '@/lib/utils/export';
+import { getDriverPerformanceBreakdown } from '@/lib/utils/analytics';
+import { Download } from 'lucide-react';
 import { DRIVERS, TEAMS } from '@/lib/data/mockData';
 import {
   getDriverResults,
@@ -32,7 +35,7 @@ export const Drivers: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [teamFilter, setTeamFilter] = useState<string>('all');
   const [nationalityFilter, setNationalityFilter] = useState<string>('all');
-  const [, setStandings] = useState<{ drivers: Array<{ driver: Driver; points: number; position: number }>; teams: Array<{ team: Team; points: number; position: number }> } | null>(null);
+  const [standings, setStandings] = useState<{ drivers: Array<{ driver: Driver; points: number; position: number }>; teams: Array<{ team: Team; points: number; position: number }> } | null>(null);
   const [nextRace, setNextRace] = useState<any>(null);
   const [driverResults, setDriverResults] = useState<any[]>([]);
   const [nextRacePrediction, setNextRacePrediction] = useState<any>(null);
@@ -153,16 +156,52 @@ export const Drivers: React.FC = () => {
     loadPrediction();
   }, [driver, nextRace]);
 
+  const [driverPerformance, setDriverPerformance] = useState<any>(null);
+
+  useEffect(() => {
+    if (driverResults.length > 0) {
+      const performance = getDriverPerformanceBreakdown(driverResults);
+      setDriverPerformance(performance);
+    }
+  }, [driverResults]);
+
   if (selectedDriver && driver) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => setSelectedDriver(null)}>
-            ← Back to Drivers
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">{driver.name}</h1>
-            <p className="text-muted-foreground">{driver.code} • {getTeam(driver.teamId)?.name}</p>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Button variant="outline" onClick={() => setSelectedDriver(null)}>
+              ← Back to Drivers
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold text-foreground">{driver.name}</h1>
+              <p className="text-muted-foreground">{driver.code} • {getTeam(driver.teamId)?.name}</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (standings) {
+                  const driverStanding = standings.drivers.find((s: any) => s.driver.id === driver.id);
+                  if (driverStanding) {
+                    exportDriverStandings([driverStanding], `driver-${driver.code}-standings`);
+                  }
+                }
+              }}
+            >
+              Export CSV
+            </Button>
+            {driverResults.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportRaceResults(driverResults, driver.name)}
+              >
+                Export Results
+              </Button>
+            )}
           </div>
         </div>
 
@@ -184,6 +223,31 @@ export const Drivers: React.FC = () => {
               subtitle="per race on average"
             />
             <StatCard title="DNFs" value={driverStats.dnfs} />
+          </div>
+        )}
+
+        {driverPerformance && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard 
+              title="Consistency" 
+              value={`${(driverPerformance.consistency * 100).toFixed(0)}%`}
+              subtitle="Lower variance = higher"
+            />
+            <StatCard 
+              title="Overtaking Rate" 
+              value={`${(driverPerformance.overtakingRate * 100).toFixed(0)}%`}
+              subtitle="Overtakes per race"
+            />
+            <StatCard 
+              title="Reliability" 
+              value={`${(driverPerformance.reliability * 100).toFixed(0)}%`}
+              subtitle="Finish rate"
+            />
+            <StatCard 
+              title="Podium Rate" 
+              value={`${(driverPerformance.podiumRate * 100).toFixed(0)}%`}
+              subtitle="Podium finishes"
+            />
           </div>
         )}
 
@@ -338,17 +402,30 @@ export const Drivers: React.FC = () => {
       </div>
 
       {/* Drivers Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredDrivers.map((driver) => {
-          return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-foreground">All Drivers</h2>
+          {standings && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportDriverStandings(standings.drivers)}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export Standings
+            </Button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredDrivers.map((driver) => (
             <DriverCard
               key={driver.id}
               driver={driver}
               showDetails
               onClick={() => setSelectedDriver(driver.id)}
             />
-          );
-        })}
+          ))}
+        </div>
       </div>
 
       {filteredDrivers.length === 0 && (

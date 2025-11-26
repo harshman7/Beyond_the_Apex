@@ -1,6 +1,10 @@
 /**
- * Mock F1 Data - Structured for easy replacement with real APIs
- * TODO: Replace with Ergast API or FastF1 integration
+ * Mock F1 Data - Fallback data structure
+ * 
+ * NOTE: The app now uses OpenF1 API for real-time data (see src/lib/api/f1DataService.ts)
+ * This mock data is kept as a reference structure and for development/testing purposes.
+ * 
+ * The OpenF1 API integration is complete and active in production.
  */
 
 import type {

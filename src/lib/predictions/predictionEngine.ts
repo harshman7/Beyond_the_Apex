@@ -1,12 +1,20 @@
 /**
  * Prediction Engine - Heuristic-based predictions
- * TODO: Replace with real ML models (TensorFlow, PyTorch, or external ML service)
  * 
- * Current heuristic combines:
- * - Recent form (last 5 races)
- * - Team performance this season
- * - Track-specific history
- * - Qualifying vs race pace delta
+ * Current Implementation:
+ * Uses weighted heuristics combining:
+ * - Recent form (last 5 races): 35%
+ * - Team performance this season: 30%
+ * - Track-specific history: 25%
+ * - Qualifying vs race pace delta: 10%
+ * 
+ * Future Enhancement:
+ * To integrate ML models, replace heuristic functions with:
+ * - TensorFlow.js for in-browser predictions
+ * - PyTorch/TensorFlow backend API
+ * - Cloud ML services (AWS SageMaker, Google Cloud ML, Azure ML)
+ * 
+ * See README.md for detailed integration guide.
  */
 
 import type {

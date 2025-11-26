@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { MainLayout } from './components/layout/MainLayout';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { Overview } from './pages/Overview';
 import { RaceWeekend } from './pages/RaceWeekend';
 import { Drivers } from './pages/Drivers';
@@ -10,9 +11,10 @@ import { Settings } from './pages/Settings';
 
 function App() {
   return (
-    <BrowserRouter>
-      <MainLayout>
-        <Routes>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <MainLayout>
+          <Routes>
           <Route path="/" element={<Overview />} />
           <Route path="/race-weekend" element={<RaceWeekend />} />
           <Route path="/drivers" element={<Drivers />} />
@@ -24,6 +26,7 @@ function App() {
         </Routes>
       </MainLayout>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 
